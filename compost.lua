@@ -39,6 +39,7 @@ function compost.defineNamespace(name, parentNamespace)
     local namespace = {}
     setmetatable(namespace, {__index = compost.namespaces[parentNamespace]})
 
+    if compost.namespaces[name] then error("Namespace '" .. tostring(name) .. "' already exists", 2) end
     compost.namespaces[name] = namespace
 end
 
@@ -51,6 +52,7 @@ end
 ---@param namespace string?
 function compost.defineComponent(componentName, componentDefinition, namespace)
     namespace = namespace or "global"
+    if compost.namespaces[namespace][componentName] then error("Component name '" .. tostring(componentName) .. "' already defined in namespace", 2) end
     compost.namespaces[namespace][componentName] = {__index = componentDefinition}
 end
 
@@ -81,6 +83,7 @@ end
 function Bin:addComponent(component, namespace)
     namespace = namespace or "global"
     local mt = compost.namespaces[namespace][component]
+    if not mt then error("Component '" .. tostring(component) .. "' not found", 2) end
 
     ---@type Compost.Component
     local instance = {
