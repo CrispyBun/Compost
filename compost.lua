@@ -1,8 +1,8 @@
 local compost = {}
 
---- Each namespace holds the definitions of components belonging to it.
+--- Each namespace holds the metatables of components belonging to it.
 --- You shouldn't edit this table directly, instead use `compost.defineNamespace`.
----@type table<string, table[]>
+---@type table<string, table<string, table>>
 compost.namespaces = {
     global = {},
 }
@@ -12,7 +12,9 @@ compost.namespaces = {
 --- An object holding instanced components  
 --- Fields may be injected into this definition to annotate components based on their names
 ---@class Compost.Bin
----@field [string] table A component
+---@field [string] table
+local Bin = {}
+local BinMT = {__index = Bin}
 
 --- If you're using annotations, your component definitions should inherit from this class
 ---@class Compost.Component
@@ -21,6 +23,8 @@ compost.namespaces = {
 
 ---@class Compost.ComponentEventManager
 ---@field events table<string, [string, string]> The event names mapped to the listening component, and a method name within it
+local EventManager = {}
+local EventManagerMT = {__index = EventManager}
 
 ------------------------------------------------------------
 
@@ -47,7 +51,44 @@ end
 ---@param namespace string?
 function compost.defineComponent(componentName, componentDefinition, namespace)
     namespace = namespace or "global"
-    compost.namespaces[namespace][componentName] = componentDefinition
+    compost.namespaces[namespace][componentName] = {__index = componentDefinition}
+end
+
+--- ### compost.newBin()
+--- Creates a new empty Bin with no components.
+---@return Compost.Bin
+function compost.newBin()
+    ---@type Compost.Bin
+    local bin = {}
+    return setmetatable(bin, BinMT)
+end
+
+---@return Compost.ComponentEventManager
+local function newEventManager()
+    ---@type Compost.ComponentEventManager
+    local eventManager = {
+        events = {},
+    }
+    return setmetatable(eventManager, EventManagerMT)
+end
+
+------------------------------------------------------------
+
+--- ### Bin:addComponent(component, namespace)
+--- Adds a component to the bin, optionally providing the namespace to look for it in (defaults to "global").
+---@param component string
+---@param namespace? string
+function Bin:addComponent(component, namespace)
+    namespace = namespace or "global"
+    local mt = compost.namespaces[namespace][component]
+
+    ---@type Compost.Component
+    local instance = {
+        Bin = self,
+        EventManager = newEventManager(),
+    }
+
+    self[component] = setmetatable(instance, mt)
 end
 
 return compost
