@@ -22,6 +22,8 @@ local BinMT = {__index = Bin}
 --- If you're using annotations, your component definitions should inherit from this class
 ---@class Compost.Component
 ---@field Bin Compost.Bin The bin this component belongs to
+---@field init? fun(...) Called when the component is added to a bin
+---@field destruct? fun() Called when the component is removed from a bin
 
 ------------------------------------------------------------
 
@@ -70,9 +72,10 @@ end
 
 --- ### Bin:addComponent(component, namespace)
 --- Adds a component to the bin, optionally providing the namespace to look for it in (defaults to "global").
----@param component string
----@param namespace? string
-function Bin:addComponent(component, namespace)
+---@param component string The component to instance
+---@param namespace? string The namespace to look for the component in (Default is "global")
+---@param ... unknown Arguments to the component's `init` method
+function Bin:addComponent(component, namespace, ...)
     namespace = namespace or "global"
     local mt = compost.namespaces[namespace][component]
     if not mt then error("Component '" .. tostring(component) .. "' not found in namespace '" .. tostring(namespace) .. "'", 2) end
@@ -83,12 +86,21 @@ function Bin:addComponent(component, namespace)
     }
 
     self[component] = setmetatable(instance, mt)
+
+    if instance.init then
+        instance:init(...)
+    end
 end
 
 --- ### Bin:removeComponent(component)
 --- Removes a component from the bin.
 ---@param component string
 function Bin:removeComponent(component)
+
+    local instance = self[component]
+    if instance and instance.destruct then
+        instance:destruct()
+    end
 
     local events = self[eventsKey]
     for event, listeners in pairs(events) do
