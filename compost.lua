@@ -97,4 +97,11 @@ function Bin:addComponent(component, namespace)
     self[component] = setmetatable(instance, mt)
 end
 
+--- ### Bin:removeComponent(component)
+--- Removes a component from the bin.
+---@param component string
+function Bin:removeComponent(component)
+    self[component] = nil
+end
+
 return compost
