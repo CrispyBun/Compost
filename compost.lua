@@ -87,7 +87,7 @@ end
 function Bin:addComponent(component, namespace)
     namespace = namespace or "global"
     local mt = compost.namespaces[namespace][component]
-    if not mt then error("Component '" .. tostring(component) .. "' not found", 2) end
+    if not mt then error("Component '" .. tostring(component) .. "' not found in namespace '" .. tostring(namespace) .. "'", 2) end
 
     ---@type Compost.Component
     local instance = {
