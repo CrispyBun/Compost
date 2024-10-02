@@ -75,6 +75,7 @@ end
 ---@param component string The component to instance
 ---@param namespace? string The namespace to look for the component in (Default is "global")
 ---@param ... unknown Arguments to the component's `init` method
+---@return table component
 function Bin:addComponent(component, namespace, ...)
     namespace = namespace or "global"
     local mt = compost.namespaces[namespace][component]
@@ -90,6 +91,8 @@ function Bin:addComponent(component, namespace, ...)
     if instance.init then
         instance:init(...)
     end
+
+    return instance
 end
 
 --- ### Bin:removeComponent(component)
@@ -113,6 +116,35 @@ function Bin:removeComponent(component)
     end
 
     self[component] = nil
+end
+
+--- ### Bin:getComponent(component)
+--- Returns the component, or `nil` if it's not present in the bin.
+---@param component string
+---@return table?
+function Bin:getComponent(component)
+    return self[component]
+end
+
+--- ### Bin:forceComponent(component, namespace, ...)
+--- Gets and returns the component if it's present, or if not, creates and adds it first.
+---@param component string
+---@param namespace? string
+---@param ... unknown
+---@return table component
+function Bin:forceComponent(component, namespace, ...)
+    if self[component] then return self[component] end
+    return self:addComponent(component, namespace, ...)
+end
+
+--- ### Bin:expectComponent(component)
+--- Returns the component if it's present, or throws an error if it's not.
+---@param component string
+---@return table
+function Bin:expectComponent(component)
+    local instance = self[component]
+    if not instance then error("Expected component '" .. tostring(component) .. "' but was not found in bin", 2) end
+    return instance
 end
 
 --- ### Bin:addListener(event, component, method)
