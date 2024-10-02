@@ -13,18 +13,12 @@ compost.namespaces = {
 --- Fields may be injected into this definition to annotate components based on their names
 ---@class Compost.Bin
 ---@field [string] table
----@field EventManager Compost.ComponentEventManager The event manager for this bin
 local Bin = {}
 local BinMT = {__index = Bin}
 
 --- If you're using annotations, your component definitions should inherit from this class
 ---@class Compost.Component
 ---@field Bin Compost.Bin The bin this component belongs to
-
----@class Compost.ComponentEventManager
----@field events table<string, [string, string]> The event names mapped to the listening component, and a method name within it
-local EventManager = {}
-local EventManagerMT = {__index = EventManager}
 
 ------------------------------------------------------------
 
@@ -58,23 +52,12 @@ function compost.defineComponent(componentName, componentDefinition, namespace)
     compost.namespaces[namespace][componentName] = {__index = componentDefinition}
 end
 
----@return Compost.ComponentEventManager
-local function newEventManager()
-    ---@type Compost.ComponentEventManager
-    local eventManager = {
-        events = {},
-    }
-    return setmetatable(eventManager, EventManagerMT)
-end
-
 --- ### compost.newBin()
 --- Creates a new empty Bin with no components.
 ---@return Compost.Bin
 function compost.newBin()
     ---@type Compost.Bin
-    local bin = {
-        EventManager = newEventManager(),
-    }
+    local bin = {}
     return setmetatable(bin, BinMT)
 end
 
