@@ -167,11 +167,12 @@ end
 --- The reducer function gets called for each listener, and gets passed:
 --- * accumulator - The accumulator value (`nil` on the first call)
 --- * value - The value returned by the listener
+--- * index - The index of the listener in the list
 --- * component - The component of the listener
 --- 
 --- The return value of the reducer will be the value of the accumulator for the next call. The final accumulator value is returned by this function.
 ---@param event string
----@param reducerFn fun(accumulator: any, value: unknown, component: table): any
+---@param reducerFn fun(accumulator: any, value: unknown, index: integer, component: table): any
 ---@param ... unknown
 ---@return unknown
 function Bin:announceAndCollect(event, reducerFn, ...)
@@ -190,7 +191,7 @@ function Bin:announceAndCollect(event, reducerFn, ...)
         if not self[component][method] then error("Listening method '" .. tostring(method) .. "' doesn't exist in component '" .. tostring(component) .. "'", 2) end
 
         local out = self[component][method](self[component], ...)
-        accumulator = reducerFn(accumulator, out, component)
+        accumulator = reducerFn(accumulator, out, listenerIndex, self[component])
     end
 
     return accumulator
@@ -204,6 +205,41 @@ compost.reducers = {}
 ---@return nil
 function compost.reducers.none()
     return nil
+end
+
+--- Returns all received values as a list
+---@param accumulator any[]?
+---@param value any
+function compost.reducers.collectResults(accumulator, value)
+    accumulator = accumulator or {}
+    accumulator[#accumulator+1] = value
+    return accumulator
+end
+
+--- Returns the minimum of numerical values
+---@param accumulator number?
+---@param value number
+---@return number
+function compost.reducers.min(accumulator, value)
+    return math.min(accumulator or value, value)
+end
+
+--- Returns the maximum of numerical values
+---@param accumulator number?
+---@param value number
+---@return number
+function compost.reducers.max(accumulator, value)
+    return math.max(accumulator or value, value)
+end
+
+--- Returns the average of numerical values
+---@param accumulator number?
+---@param value number
+---@param index integer
+---@return number
+function compost.reducers.average(accumulator, value, index)
+    accumulator = accumulator or 0
+    return (accumulator * (index - 1) + value) / index
 end
 
 return compost
