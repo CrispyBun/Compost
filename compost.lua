@@ -52,6 +52,8 @@ end
 ---@param namespace string?
 function compost.defineComponent(componentName, componentDefinition, namespace)
     namespace = namespace or "global"
+
+    if not compost.namespaces[namespace] then error("Namespace '" .. tostring(namespace) .. "' doesn't exist", 2) end
     if compost.namespaces[namespace][componentName] then error("Component name '" .. tostring(componentName) .. "' already defined in namespace", 2) end
     compost.namespaces[namespace][componentName] = {__index = componentDefinition}
 end
