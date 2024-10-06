@@ -239,7 +239,7 @@ function compost.reducers.none()
     return nil
 end
 
---- Returns all received values as a list
+--- Returns all received values as a list (nils are skipped)
 ---@param accumulator any[]?
 ---@param value any
 function compost.reducers.collectResults(accumulator, value)
