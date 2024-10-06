@@ -76,6 +76,7 @@ end
 ---@return table component
 function Bin:addComponent(component, namespace, ...)
     namespace = namespace or "global"
+    if not compost.namespaces[namespace] then error("Namespace '" .. tostring(namespace) .. "' doesn't exist", 2) end
     local mt = compost.namespaces[namespace][component]
     if not mt then error("Component '" .. tostring(component) .. "' not found in namespace '" .. tostring(namespace) .. "'", 2) end
 
