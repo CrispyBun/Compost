@@ -61,7 +61,6 @@ end
 --- Creates a new empty Bin with no components.
 ---@return Compost.Bin
 function compost.newBin()
-    ---@type Compost.Bin
     local bin = {
         [eventsKey] = {},
     }
