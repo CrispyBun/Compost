@@ -1,11 +1,9 @@
 local compost = {}
 
---- Each namespace holds the metatables of components belonging to it.
---- You shouldn't edit this table directly, instead use `compost.defineNamespace`.
----@type table<string, table<string, table>>
-compost.namespaces = {
-    global = {},
-}
+--- The individual component IDs mapped to their definitions.  
+--- You shouldn't edit this table directly, instead use `compost.defineComponent`.
+---@type table<string, Compost.ComponentDefinition>
+compost.components = {}
 
 local eventsKey = {}
 compost.eventsKey = eventsKey -- Used to get the list of events from a Bin
@@ -22,38 +20,53 @@ local BinMT = {__index = Bin}
 --- If you're using annotations, your component definitions should inherit from this class
 ---@class Compost.Component
 ---@field Bin Compost.Bin The bin this component belongs to
----@field init? fun(...) Called when the component is added to a bin
----@field destruct? fun() Called when the component is removed from a bin
+---@field init? fun(...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
+---@field destruct? fun() Called when the component is removed from a bin.
+
+---@class Compost.ComponentDefinition
+---@field metatable table The metatable for instances of this component
+---@field values table Which table this component definition was made from (this is the table the metatable's `__index` points to)
+---@field name any The name of the component within a bin
 
 ------------------------------------------------------------
 
---- ### compost.newNamespace(name, parentNamespace)
---- Defines a new namespace with the given name.  
---- A parent namespace may be provided to extend it. If not provided, the global namespace is used for the parent.
----@param name string The name of the namespace
----@param parentNamespace? string The name of the parent namespace (Optional)
-function compost.defineNamespace(name, parentNamespace)
-    parentNamespace = parentNamespace or "global"
-
-    local namespace = {}
-    setmetatable(namespace, {__index = compost.namespaces[parentNamespace]})
-
-    if compost.namespaces[name] then error("Namespace '" .. tostring(name) .. "' already exists", 2) end
-    compost.namespaces[name] = namespace
-end
-
---- ### compost.defineComponent(componentName, componentDefinition, namespace)
+--- ### compost.defineComponent(values, id, name)
 --- Defines a new component.  
---- You can specify which namespace the component belongs to, or by default, it will be put in the "global" namespace.  
---- A component may be defined multiple times for different namespaces.
----@param componentName string
----@param componentDefinition table
----@param namespace string?
-function compost.defineComponent(componentName, componentDefinition, namespace)
-    namespace = namespace or "global"
+--- * `values` is the table of methods and fields for the component.
+--- * `id` is the identifier of the component, which is used to create and add the component to bins. You can leave this as nil to use the actual `values` table as the ID, which will eliminate any possibility of a name clash in IDs.
+--- * `name` is the key of the instanced component within a bin, which is used to refer to it in any way (getting, removing, attaching events, ...). If you want this to be the same as `id`, just leave it as nil.
+--- ```
+--- local Health = {}
+--- Health.value = 100
+--- 
+--- -- More options depending on your naming scheme, e.g.:
+--- 
+--- compost.defineComponent(Health, "GameObject.Health", "health")
+--- -- Then use `addComponent("GameObject.Health")` to add this component under the key "health"
+--- 
+--- compost.defineComponent(Health, "GameObject.Health")
+--- -- Then use `addComponent("GameObject.Health")` to add this component under the key "GameObject.Health"
+--- 
+--- compost.defineComponent(Health)
+--- -- Then use `addComponent(Health)` to add this component under the key [Health]
+--- ```
+---@param values table A table of the methods and all fields of the component
+---@param id? any The ID of the component used to add it to bins (Defaults to the same as `values`)
+---@param name? any The name of the component within a bin (Defaults to the same as `id`)
+function compost.defineComponent(values, id, name)
+    id = id ~= nil and id or values
+    name = name ~= nil and name or id
 
-    if not compost.namespaces[namespace] then error("Namespace '" .. tostring(namespace) .. "' doesn't exist", 2) end
-    compost.namespaces[namespace][componentName] = {__index = componentDefinition}
+    if compost.components[id] then error("Component with ID '" .. tostring(id) .. "' already defined", 2) end
+
+    ---@type Compost.ComponentDefinition
+    local definition = {
+        metatable = {__index = values},
+        values = values,
+        name = name,
+    }
+
+    compost.components[id] = definition
 end
 
 --- ### compost.newBin()
@@ -68,24 +81,23 @@ end
 
 ------------------------------------------------------------
 
---- ### Bin:addComponent(component, namespace)
---- Adds a component to the bin, optionally providing the namespace to look for it in (defaults to "global").
----@param component string The component to instance
----@param namespace? string The namespace to look for the component in (Default is "global")
+--- ### Bin:addComponent(componentId)
+--- Adds a component to the bin based on its ID.
+---@param componentId any The component to instance
 ---@param ... unknown Arguments to the component's `init` method
 ---@return table component
-function Bin:addComponent(component, namespace, ...)
-    namespace = namespace or "global"
-    if not compost.namespaces[namespace] then error("Namespace '" .. tostring(namespace) .. "' doesn't exist", 2) end
-    local mt = compost.namespaces[namespace][component]
-    if not mt then error("Component '" .. tostring(component) .. "' not found in namespace '" .. tostring(namespace) .. "'", 2) end
+function Bin:addComponent(componentId, ...)
+    local definition = compost.components[componentId]
+    if not definition then error("Component with ID '" .. tostring(componentId) .. "' not found", 2) end
+
+    if self[definition.name] then error("Component with name '" .. tostring(definition.name) .. "' already exists in bin", 2) end
 
     ---@type Compost.Component
     local instance = {
         Bin = self,
     }
 
-    self[component] = setmetatable(instance, mt)
+    self[definition.name] = setmetatable(instance, definition.metatable)
 
     if instance.init then
         instance:init(...)
@@ -95,11 +107,11 @@ function Bin:addComponent(component, namespace, ...)
 end
 
 --- ### Bin:removeComponent(component)
---- Removes a component from the bin.
----@param component string
-function Bin:removeComponent(component)
+--- Removes a component from the bin based on its *name*.
+---@param componentName any
+function Bin:removeComponent(componentName)
 
-    local instance = self[component]
+    local instance = self[componentName]
     if instance and instance.destruct then
         instance:destruct()
     end
@@ -108,45 +120,45 @@ function Bin:removeComponent(component)
     for event, listeners in pairs(events) do
         for listenerIndex = 1, #listeners do
             local listener = listeners[listenerIndex]
-            if listener[1] == component then
+            if listener[1] == componentName then
                 table.remove(listeners, listenerIndex)
             end
         end
     end
 
-    self[component] = nil
+    self[componentName] = nil
 end
 
---- ### Bin:getComponent(component)
---- Returns the component, or `nil` if it's not present in the bin.
----@param component string
+--- ### Bin:getComponent(componentName)
+--- Returns the component (based on its name), or `nil` if it's not present in the bin.
+---@param componentName any
 ---@return table?
-function Bin:getComponent(component)
-    return self[component]
+function Bin:getComponent(componentName)
+    return self[componentName]
 end
 
---- ### Bin:forceComponent(component, namespace, ...)
+--- ### Bin:forceComponent(componentName, componentId, ...)
 --- Gets and returns the component if it's present, or if not, creates and adds it first.
----@param component string
----@param namespace? string
+---@param componentName any
+---@param componentId any
 ---@param ... unknown
 ---@return table component
-function Bin:forceComponent(component, namespace, ...)
-    if self[component] then return self[component] end
-    return self:addComponent(component, namespace, ...)
+function Bin:forceComponent(componentName, componentId, ...)
+    if self[componentName] then return self[componentName] end
+    return self:addComponent(componentId, ...)
 end
 
 --- ### Bin:expectComponent(component)
 --- Returns the component if it's present, or throws an error if it's not.
----@param component string
+---@param componentName string
 ---@return table
-function Bin:expectComponent(component)
-    local instance = self[component]
-    if not instance then error("Expected component '" .. tostring(component) .. "' but was not found in bin", 2) end
+function Bin:expectComponent(componentName)
+    local instance = self[componentName]
+    if not instance then error("Expected component '" .. tostring(componentName) .. "' but was not found in bin", 2) end
     return instance
 end
 
---- ### Bin:addListener(event, component, method)
+--- ### Bin:addListener(event, componentName, methodName)
 --- Adds a listener to an event. The listener is a component in the same bin and a method within it.
 --- 
 --- Example usage:
@@ -154,22 +166,22 @@ end
 --- bin:addListener("health:damage", "sound", "playDamaged")
 --- ```
 ---@param event string
----@param component string
----@param method string
-function Bin:addListener(event, component, method)
+---@param componentName any
+---@param methodName string
+function Bin:addListener(event, componentName, methodName)
     local events = self[eventsKey]
     if not events[event] then events[event] = {} end
 
     local listeners = events[event]
-    listeners[#listeners+1] = {component, method}
+    listeners[#listeners+1] = {componentName, methodName}
 end
 
---- ### Bin:removeListener(event, component, method)
+--- ### Bin:removeListener(event, componentName, methodName)
 --- Removes a listener from an event.
 ---@param event string
----@param component string
----@param method string
-function Bin:removeListener(event, component, method)
+---@param componentName any
+---@param methodName string
+function Bin:removeListener(event, componentName, methodName)
     local events = self[eventsKey]
     if not events[event] then return end
 
@@ -177,7 +189,7 @@ function Bin:removeListener(event, component, method)
     for listenerIndex = 1, #listeners do
         local listener = listeners[listenerIndex]
 
-        if listener[1] == component and listener[2] == method then
+        if listener[1] == componentName and listener[2] == methodName then
             table.remove(listeners, listenerIndex)
             return
         end
