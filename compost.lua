@@ -279,4 +279,8 @@ function compost.reducers.average(accumulator, value, index)
     return (accumulator * (index - 1) + value) / index
 end
 
+------------------------------------------------------------
+
+compost.Bin = Bin -- Bin class exposed for the ability to potentially add more methods
+
 return compost
