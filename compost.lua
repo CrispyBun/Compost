@@ -86,7 +86,7 @@ function Bin:addComponent(component, ...)
 end
 
 --- ### Bin:removeComponent(component)
---- Removes a component from the bin.
+--- Removes a component from the bin (also removing any of its listeners).
 ---@param component Compost.Component
 function Bin:removeComponent(component)
 
@@ -97,13 +97,15 @@ function Bin:removeComponent(component)
         instance:destruct()
     end
 
-    -- todo: this approach isnt ideal
     local events = self[EVENTS_KEY]
     for event, listeners in pairs(events) do
-        for listenerIndex = 1, #listeners do
+        local listenerIndex = 1
+        while listenerIndex <= #listeners do
             local listener = listeners[listenerIndex]
             if listener[1] == component then
                 table.remove(listeners, listenerIndex)
+            else
+                listenerIndex = listenerIndex + 1
             end
         end
     end
@@ -149,7 +151,7 @@ end
 --- 
 --- Example usage:
 --- ```
---- bin:addListener("health:damage", Sound, "playDamaged")
+--- bin:addListener("Health.Damage", Sound, "playDamaged")
 --- ```
 ---@param event string
 ---@param component Compost.Component
