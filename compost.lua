@@ -253,6 +253,28 @@ function compost.reducers.collectResults(accumulator, value)
     return accumulator
 end
 
+local random = _G["love"] and _G["love"].math.random or math.random
+--- Randomly picks a value from the received values to return
+---@param accumulator any
+---@param value any
+---@param index integer
+---@return any
+function compost.reducers.random(accumulator, value, index)
+    if index == 1 then return value end -- Kinda redundant, but adds clarity
+    if random() < (1 / index) then return value end
+    return accumulator
+end
+
+--- Only allows a single listener to be present and return a value. If there are more listeners present, it throws an error.
+---@param accumulator any
+---@param value any
+---@param index integer
+---@return any
+function compost.reducers.singleListener(accumulator, value, index)
+    if index == 1 then return value end
+    error("Announcing an event that expects a single listener, but multiple listeners are present", 3)
+end
+
 --- Returns the minimum of numerical values
 ---@param accumulator number?
 ---@param value number
@@ -277,6 +299,14 @@ end
 function compost.reducers.average(accumulator, value, index)
     accumulator = accumulator or 0
     return (accumulator * (index - 1) + value) / index
+end
+
+--- Returns the sum of numerical values
+---@param accumulator number?
+---@param value number
+---@return number
+function compost.reducers.sum(accumulator, value)
+    return (accumulator or 0) + value
 end
 
 ------------------------------------------------------------
