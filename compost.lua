@@ -28,6 +28,13 @@ local ComponentBuiltinMethods = {}
 --- ```
 --- self.Bin.addListener(event, ComponentDefinition, methodName)
 --- ```
+--- 
+--- Example usage:
+--- ```lua
+--- function Sound:init()
+---     self:addBinListener("Health.Damage", "playDamaged")
+--- end
+--- ```
 ---@param event string
 ---@param methodName string?
 function ComponentBuiltinMethods:addBinListener(event, methodName)
