@@ -19,10 +19,25 @@ local BinMT = {__index = Bin}
 ---@field Bin Compost.Bin The bin this component belongs to
 ---@field init? fun(...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
 ---@field destruct? fun() Called when the component is removed from a bin.
+local ComponentBuiltinMethods = {}
+
+------------------------------------------------------------
+
+--- ### Component:addBinListener(event, methodName)
+--- A shortcut for:
+--- ```
+--- self.Bin.addListener(event, ComponentDefinition, methodName)
+--- ```
+---@param event string
+---@param methodName string?
+function ComponentBuiltinMethods:addBinListener(event, methodName)
+    self.Bin:addListener(event, self[META_KEY].__index, methodName)
+end
 
 ------------------------------------------------------------
 
 --- ### compost.createComponent(component)  
+--- ### compost.component(component)  
 --- Turns the table into a compost component and returns it. 
 ---  
 --- Example usage:  
@@ -46,6 +61,9 @@ local BinMT = {__index = Bin}
 ---@param component T
 ---@return T
 function compost.createComponent(component)
+    for key, value in pairs(ComponentBuiltinMethods) do
+        component[key] = value
+    end
     component[META_KEY] = {__index = component}
     return component
 end
