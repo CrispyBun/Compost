@@ -19,27 +19,12 @@ local BinMT = {__index = Bin}
 ---@field Bin Compost.Bin The bin this component belongs to
 ---@field init? fun(...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
 ---@field destruct? fun() Called when the component is removed from a bin.
-local ComponentBuiltinMethods = {}
+---@field Events? table<string, Compost.BinEvent> A table of events this component defines and announces. This is just a convention you can use, though, as BinEvents can be defined anywhere in your codebase, not just in components.
+local ComponentSharedMethods = {}
 
-------------------------------------------------------------
-
---- ### Component:addBinListener(event, methodName)
---- A shortcut for:
---- ```
---- self.Bin.addListener(event, ComponentDefinition, methodName)
---- ```
---- 
---- Example usage:
---- ```lua
---- function Sound:init()
----     self:addBinListener("Health.Damage", "playDamaged")
---- end
---- ```
----@param event string
----@param methodName string?
-function ComponentBuiltinMethods:addBinListener(event, methodName)
-    self.Bin:addListener(event, self[META_KEY].__index, methodName)
-end
+---@class Compost.BinEvent
+local BinEvent = {}
+local BinEventMT = {__index = BinEvent}
 
 ------------------------------------------------------------
 
@@ -56,7 +41,7 @@ end
 --- Position.x = 0
 --- Position.y = 0
 ---
---- return moss.create(Position)
+--- return compost.component(Position)
 --- ```
 --- ---
 --- #### main.lua
@@ -68,13 +53,43 @@ end
 ---@param component T
 ---@return T
 function compost.createComponent(component)
-    for key, value in pairs(ComponentBuiltinMethods) do
-        component[key] = value
+    for key, value in pairs(ComponentSharedMethods) do
+        component[key] = component[key] == nil and value or component[key]
     end
     component[META_KEY] = {__index = component}
     return component
 end
 compost.component = compost.createComponent
+
+--- ### Component:addBinListener(event)
+--- A shortcut for:
+--- ```
+--- self.Bin.addListener(event, Component)
+--- ```
+--- 
+--- Example usage:
+--- ```lua
+--- function Sound:init()
+---     self:addBinListener(DamageEvent)
+--- end
+--- 
+--- Sound[DamageEvent] = function(self)
+---    -- play hurt sound
+--- end
+--- 
+--- -- or:
+--- 
+--- function Sound:playDamaged()
+---   -- play hurt sound
+--- end
+--- Sound[DamageEvent] = Sound.playDamaged
+--- ```
+---@param event Compost.BinEvent
+function ComponentSharedMethods:addBinListener(event)
+    return self.Bin:addListener(event, self[META_KEY].__index --[[this is how you get the component definition table from an instance lol]])
+end
+
+------------------------------------------------------------
 
 --- ### compost.newBin()
 --- Creates a new empty Bin with no components.
@@ -85,8 +100,6 @@ function compost.newBin()
     }
     return setmetatable(bin, BinMT)
 end
-
-------------------------------------------------------------
 
 --- ### Bin:addComponent(component)
 --- Adds a component to the bin.
@@ -123,16 +136,8 @@ function Bin:removeComponent(component)
     end
 
     local events = self[EVENTS_KEY]
-    for event, listeners in pairs(events) do
-        local listenerIndex = 1
-        while listenerIndex <= #listeners do
-            local listener = listeners[listenerIndex]
-            if listener[1] == component then
-                table.remove(listeners, listenerIndex)
-            else
-                listenerIndex = listenerIndex + 1
-            end
-        end
+    for event in pairs(events) do
+        self:removeListener(event, component)
     end
 
     self[component] = nil
@@ -170,35 +175,49 @@ function Bin:expectComponent(component)
     return instance
 end
 
---- ### Bin:addListener(event, component, methodName)
---- Adds a listener to an event. The listener is a component in the same bin and a method within it.
---- If the method name isn't specified, it becomes the same as the event name.
+--- ### Bin:addListener(event, component)
+--- Attaches the component as a listener to an event (assuming the function for the listener is defined in the component).
 --- 
 --- Example usage:
 --- ```
---- bin:addListener("Health.Damage", Sound, "playDamaged")
+--- function SoundComponent:init()
+---     -- Attach the listener each time the component is added to a bin
+---     self.Bin:addListener(DamageEvent, SoundComponent)
+--- end
+--- 
+--- SoundComponent[DamageEvent] = function(self) -- Define the listener
+---     -- play hurt sound
+--- end
+--- 
+--- -- or:
+--- 
+--- function SoundComponent:playDamaged()
+---    -- play hurt sound
+--- end
+--- SoundComponent[DamageEvent] = SoundComponent.playDamaged -- Define the listener
 --- ```
----@param event string
+---@param event Compost.BinEvent
 ---@param component Compost.Component
----@param methodName? string
-function Bin:addListener(event, component, methodName)
-    methodName = methodName or event
+function Bin:addListener(event, component)
+    if event == nil then return error("bad argument #1 to 'Bin:addListener' (event is nil)") end
 
     local events = self[EVENTS_KEY]
     if not events[event] then events[event] = {} end
 
     local listeners = events[event]
-    listeners[#listeners+1] = {component, methodName}
+
+    for listenerIndex = 1, #listeners do
+        if listeners[listenerIndex] == component then return error("Component '" .. tostring(component) .. "' is already attached as a listener for event '" .. tostring(event) .. "'") end
+    end
+
+    listeners[#listeners+1] = component
 end
 
---- ### Bin:removeListener(event, component, methodName)
---- Removes a listener from an event.
----@param event string
+--- ### Bin:removeListener(event, component)
+--- Removes a listener from an event. Does nothing if the listener is not present or if the event doesn't exist.
+---@param event Compost.BinEvent
 ---@param component Compost.Component
----@param methodName? string
-function Bin:removeListener(event, component, methodName)
-    methodName = methodName or event
-
+function Bin:removeListener(event, component)
     local events = self[EVENTS_KEY]
     if not events[event] then return end
 
@@ -206,7 +225,7 @@ function Bin:removeListener(event, component, methodName)
     for listenerIndex = 1, #listeners do
         local listener = listeners[listenerIndex]
 
-        if listener[1] == component and listener[2] == methodName then
+        if listener == component then
             table.remove(listeners, listenerIndex)
             return
         end
@@ -215,7 +234,7 @@ end
 
 --- ### Bin:announce(event, ...)
 --- Announces an event with the given arguments.
----@param event string
+---@param event Compost.BinEvent
 ---@param ... unknown
 function Bin:announce(event, ...)
     return self:announceAndCollect(event, compost.reducers.none, ...)
@@ -233,7 +252,7 @@ end
 --- The return value of the reducer will be the value of the accumulator for the next call. The final accumulator value is returned by this function.  
 --- 
 --- Useful reducer functions can be found in `compost.reducers`.
----@param event string
+---@param event Compost.BinEvent
 ---@param reducerFn fun(accumulator: any, value: unknown, index: integer, component: table): any
 ---@param ... unknown
 ---@return unknown
@@ -245,19 +264,39 @@ function Bin:announceAndCollect(event, reducerFn, ...)
 
     local listeners = events[event]
     for listenerIndex = 1, #listeners do
-        local listener = listeners[listenerIndex]
-        local component = listener[1]
-        local method = listener[2]
+        local component = listeners[listenerIndex]
 
-        if not self[component] then error("Component '" .. tostring(component) .. "' is set as a listener but isn't attached to the bin", 2) end
-        if not self[component][method] then error("Listening method '" .. tostring(method) .. "' doesn't exist in component '" .. tostring(component) .. "'", 2) end
+        if not self[component] then error("[Error in listener] Couldn't announce event, component '" .. tostring(component) .. "' is set as a listener but isn't attached to the bin", 2) end
+        if not self[component][event] then error("[Error in listener] Couldn't announce event, listening component '" .. tostring(component) .. "' doesn't define a listener function for the event '" .. tostring(event) .. "'", 2) end
 
-        local out = self[component][method](self[component], ...)
-        accumulator = reducerFn(accumulator, out, listenerIndex, self[component])
+        local receivedValue = self[component][event](self[component], ...)
+        accumulator = reducerFn(accumulator, receivedValue, listenerIndex, self[component])
     end
 
     return accumulator
 end
+
+------------------------------------------------------------
+
+--- ### compost.newEvent()
+--- Creates a new bin event object.  
+--- 
+--- Example usage:
+--- ```
+--- HealthComponent.Events = {
+---     GetHealth = compost.newBinEvent(),
+---     Damage = compost.newBinEvent(),
+---     Death = compost.newBinEvent(),
+---     Heal = compost.newBinEvent(),
+--- }
+--- ```
+---@return Compost.BinEvent
+function compost.newEvent()
+    ---@type Compost.BinEvent
+    local event = {}
+    return setmetatable(event, BinEventMT)
+end
+compost.newBinEvent = compost.newEvent
 
 ------------------------------------------------------------
 
