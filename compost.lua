@@ -23,9 +23,10 @@ local BinMT = {__index = Bin}
 local ComponentSharedMethods = {}
 
 ---@class Compost.BinEvent
+---@field name string The name of the event, mainly for debugging purposes
 ---@field reducer fun(accumulator: any, value: unknown, index: integer, component: table): any A reducer function, used for events for which listeners return values. You can use a function from `compost.reducers` or write your own. Default is `compost.reducers.none`.
 local BinEvent = {}
-local BinEventMT = {__index = BinEvent}
+local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end}
 
 ------------------------------------------------------------
 
@@ -261,11 +262,19 @@ end
 function compost.newEvent(reducer)
     ---@type Compost.BinEvent
     local event = {
+        name = "Unnamed Event",
         reducer = reducer or compost.reducers.none,
     }
     return setmetatable(event, BinEventMT)
 end
 compost.newBinEvent = compost.newEvent
+
+--- ### BinEvent:setName(name)
+--- Sets the name of the event, mainly used for debugging purposes.
+function BinEvent:setName(name)
+    self.name = name
+    return self
+end
 
 --- ### BinEvent:setReducer(reducerFn)
 --- Sets the reducer function for the event to collect results from listeners.
