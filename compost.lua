@@ -25,6 +25,7 @@ local ComponentSharedMethods = {}
 ---@class Compost.BinEvent
 ---@field name string The name of the event, mainly for debugging purposes
 ---@field reducer fun(accumulator: any, value: unknown, index: integer, component: table): any A reducer function, used for events for which listeners return values. You can use a function from `compost.reducers` or write your own. Default is `compost.reducers.none`.
+---@field typeChecker? fun(value: any): boolean A function for checking if the listeners are returning the correct type. If not present, no type checking is done. You can use a function from `compost.typeCheckers` or write your own.
 local BinEvent = {}
 local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end}
 
@@ -258,12 +259,15 @@ end
 --- }
 --- ```
 ---@param reducer? fun(accumulator: any, value: unknown, index: integer, component: table): any
+---@param typeChecker? fun(value: any): boolean
+---@param name? string
 ---@return Compost.BinEvent
-function compost.newEvent(reducer)
+function compost.newEvent(reducer, typeChecker, name)
     ---@type Compost.BinEvent
     local event = {
-        name = "Unnamed Event",
+        name = name or "Unnamed Event",
         reducer = reducer or compost.reducers.none,
+        typeChecker = typeChecker,
     }
     return setmetatable(event, BinEventMT)
 end
@@ -271,6 +275,8 @@ compost.newBinEvent = compost.newEvent
 
 --- ### BinEvent:setName(name)
 --- Sets the name of the event, mainly used for debugging purposes.
+---@param name string
+---@return Compost.BinEvent self
 function BinEvent:setName(name)
     self.name = name
     return self
@@ -295,6 +301,16 @@ function BinEvent:setReducer(reducerFn)
     return self
 end
 
+--- ### BinEvent:setTypeChecker(typeCheckerFn)
+--- Sets the type checker function for the event to check if each listener is returning the correct type.  
+--- Useful type checker functions can be found in `compost.typeCheckers`.
+---@param typeCheckerFn fun(value: any): boolean
+---@return Compost.BinEvent self
+function BinEvent:setTypeChecker(typeCheckerFn)
+    self.typeChecker = typeCheckerFn
+    return self
+end
+
 --- ### BinEvent:announce(bin, ...)
 --- Announces the event to the listeners in the bin. This is called automatically by the bin.  
 --- 
@@ -306,6 +322,7 @@ function BinEvent:announce(bin, ...)
     local events = bin[EVENTS_KEY]
     if not events[self] then return nil end
 
+    local typeChecker = self.typeChecker
     local reducerFn = self.reducer
     local accumulator
 
@@ -317,6 +334,8 @@ function BinEvent:announce(bin, ...)
         if not bin[component][self] then error("[Error in listener] Couldn't announce event, listening component '" .. tostring(component) .. "' doesn't define a listener function for the event '" .. tostring(self) .. "'", 2) end
 
         local receivedValue = bin[component][self](bin[component], ...)
+        if typeChecker and not typeChecker(receivedValue) then error("[Error in listener] Error while announcing event, listening component '" .. tostring(component) .. "' returned unexpected value according to the typeChecker in event '" .. tostring(self) .. "'", 2) end
+
         accumulator = reducerFn(accumulator, receivedValue, listenerIndex, bin[component])
     end
 
@@ -325,7 +344,7 @@ end
 
 ------------------------------------------------------------
 
---- Useful reducer functions for use with `Bin:announceAndCollect()`.
+--- Useful reducer functions for use with events.
 compost.reducers = {}
 
 ---@return nil
@@ -396,6 +415,29 @@ end
 ---@return number
 function compost.reducers.sum(accumulator, value)
     return (accumulator or 0) + value
+end
+
+------------------------------------------------------------
+
+--- Some handy type checking functions for use with events.
+compost.typeCheckers = {}
+
+---@param value any
+---@return boolean
+compost.typeCheckers.isNil = function(value)
+    return value == nil
+end
+
+---@param value any
+---@return boolean
+compost.typeCheckers.isNotNil = function(value)
+    return value ~= nil
+end
+
+---@param value any
+---@return boolean
+compost.typeCheckers.isNumber = function(value)
+    return type(value) == "number"
 end
 
 ------------------------------------------------------------
