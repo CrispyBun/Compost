@@ -23,6 +23,7 @@ local BinMT = {__index = Bin}
 local ComponentSharedMethods = {}
 
 ---@class Compost.BinEvent
+---@field reducer fun(accumulator: any, value: unknown, index: integer, component: table): any A reducer function, used for events for which listeners return values. You can use a function from `compost.reducers` or write your own. Default is `compost.reducers.none`.
 local BinEvent = {}
 local BinEventMT = {__index = BinEvent}
 
@@ -233,47 +234,12 @@ function Bin:removeListener(event, component)
 end
 
 --- ### Bin:announce(event, ...)
---- Announces an event with the given arguments.
+--- Announces an event with the given arguments.  
+--- If the event has a reducer function set, the reduced results from the listeners will be returned.
 ---@param event Compost.BinEvent
 ---@param ... unknown
 function Bin:announce(event, ...)
-    return self:announceAndCollect(event, compost.reducers.none, ...)
-end
-
---- ### Bin:announceAndCollect(event, reducerFn, ...)
---- Announces an event with the given arguments, and collects the results from the listeners using a reducer function.
---- 
---- The reducer function gets called for each listener, and gets passed:
---- * accumulator - The accumulator value (`nil` on the first call)
---- * value - The value returned by the listener
---- * index - The index of the listener in the list
---- * component - The component of the listener
---- 
---- The return value of the reducer will be the value of the accumulator for the next call. The final accumulator value is returned by this function.  
---- 
---- Useful reducer functions can be found in `compost.reducers`.
----@param event Compost.BinEvent
----@param reducerFn fun(accumulator: any, value: unknown, index: integer, component: table): any
----@param ... unknown
----@return unknown
-function Bin:announceAndCollect(event, reducerFn, ...)
-    local events = self[EVENTS_KEY]
-    if not events[event] then return nil end
-
-    local accumulator
-
-    local listeners = events[event]
-    for listenerIndex = 1, #listeners do
-        local component = listeners[listenerIndex]
-
-        if not self[component] then error("[Error in listener] Couldn't announce event, component '" .. tostring(component) .. "' is set as a listener but isn't attached to the bin", 2) end
-        if not self[component][event] then error("[Error in listener] Couldn't announce event, listening component '" .. tostring(component) .. "' doesn't define a listener function for the event '" .. tostring(event) .. "'", 2) end
-
-        local receivedValue = self[component][event](self[component], ...)
-        accumulator = reducerFn(accumulator, receivedValue, listenerIndex, self[component])
-    end
-
-    return accumulator
+    return event:announce(self, ...)
 end
 
 ------------------------------------------------------------
@@ -290,13 +256,63 @@ end
 ---     Heal = compost.newBinEvent(),
 --- }
 --- ```
+---@param reducer? fun(accumulator: any, value: unknown, index: integer, component: table): any
 ---@return Compost.BinEvent
-function compost.newEvent()
+function compost.newEvent(reducer)
     ---@type Compost.BinEvent
-    local event = {}
+    local event = {
+        reducer = reducer or compost.reducers.none,
+    }
     return setmetatable(event, BinEventMT)
 end
 compost.newBinEvent = compost.newEvent
+
+--- ### BinEvent:setReducer(reducerFn)
+--- Sets the reducer function for the event to collect results from listeners.
+--- 
+--- The reducer function gets called for each listener, and gets passed:
+--- * accumulator - The accumulator value (`nil` on the first call)
+--- * value - The value returned by the listener
+--- * index - The index of the listener in the list
+--- * component - The component of the listener
+--- 
+--- The return value of the reducer will be the value of the accumulator for the next call. The final accumulator value is returned by this function.  
+--- 
+--- Useful reducer functions can be found in `compost.reducers`. If you write your own reducer, it should return the same value no matter which order the listeners are in.
+---@param reducerFn fun(accumulator: any, value: unknown, index: integer, component: table): any
+---@return Compost.BinEvent self
+function BinEvent:setReducer(reducerFn)
+    self.reducer = reducerFn
+    return self
+end
+
+--- ### BinEvent:announce(bin, ...)
+--- Announces the event to the listeners in the bin. This is called automatically by the bin.  
+--- 
+--- It is possible to override this function for an event to change its behavior, but that's mostly for advanced usage. Regular events should be fine for most cases.
+---@param bin Compost.Bin
+---@param ... unknown
+---@return unknown
+function BinEvent:announce(bin, ...)
+    local events = bin[EVENTS_KEY]
+    if not events[self] then return nil end
+
+    local reducerFn = self.reducer
+    local accumulator
+
+    local listeners = events[self]
+    for listenerIndex = 1, #listeners do
+        local component = listeners[listenerIndex]
+
+        if not bin[component] then error("[Error in listener] Couldn't announce event, component '" .. tostring(component) .. "' is set as a listener but isn't attached to the bin", 2) end
+        if not bin[component][self] then error("[Error in listener] Couldn't announce event, listening component '" .. tostring(component) .. "' doesn't define a listener function for the event '" .. tostring(self) .. "'", 2) end
+
+        local receivedValue = bin[component][self](bin[component], ...)
+        accumulator = reducerFn(accumulator, receivedValue, listenerIndex, bin[component])
+    end
+
+    return accumulator
+end
 
 ------------------------------------------------------------
 
