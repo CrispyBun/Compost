@@ -367,7 +367,7 @@ function BinEvent:announce(bin, ...)
         if not bin[component][self] then error("[Error in listener] Couldn't announce event, listening component '" .. tostring(component) .. "' doesn't define a listener function for the event '" .. tostring(self) .. "'", 2) end
 
         local receivedValue = bin[component][self](bin[component], ...)
-        if typeChecker and not typeChecker(receivedValue) then error("[Error in listener] Error while announcing event, listening component '" .. tostring(component) .. "' returned unexpected value according to the typeChecker in event '" .. tostring(self) .. "'", 2) end
+        if typeChecker and not typeChecker(receivedValue) then error("[Error in listener] Error while announcing event, listening component '" .. tostring(component) .. "' returned unexpected value according to the typeChecker in event '" .. tostring(self) .. "' (got: '" .. tostring(receivedValue) .. "')", 2) end
 
         accumulator = reducerFn(accumulator, receivedValue, listenerIndex, bin[component])
     end
