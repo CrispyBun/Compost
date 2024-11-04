@@ -21,12 +21,26 @@ local BinMT = {__index = Bin}
 ---@class Compost.Component
 ---@field Bin Compost.Bin The bin this component belongs to
 ---@field Name? string The name of the component, mainly used for debugging purposes
----@field init? fun(...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
----@field destruct? fun() Called when the component is removed from a bin.
+---@field init? fun(self: table, ...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
+---@field destruct? fun(self: table) Called when the component is removed from a bin.
 ---@field Events? table<string, Compost.BinEvent> A table of events this component defines and announces. This should be the place where events that a component controls should be defined, though BinEvents can be defined anywhere in your codebase. Putting events in this table is just a convention.
 local ComponentSharedMethods = getClassBase()
 
---- An event triggered on the entire bin, which components can add their own implementations for
+--- The main way to consistently instance objects, without having to spam `addComponent` a million times.  
+--- Even when instanced, Templates are *not* deep copied when used in templates or in `deepCopy`.
+---@class Compost.Template
+---@field init? fun(bin: Compost.Bin, ...) Called a bin is instanced from the template
+---@field preInit? fun(bin: Compost.Bin, ...) Called when a bin is instancing from the template, but before any components have been added to it. Arguments are the same as for init.
+---@field components Compost.TemplateComponentData[]
+local Template = getClassBase()
+local TemplateMT = {__index = Template, __preventdeepcopy = true}
+
+---@class Compost.TemplateComponentData
+---@field component Compost.Component The component to be instanced
+---@field data? table Table of data to be *deep* copied into the instanced component
+
+--- An event triggered on the entire bin, which components can add their own implementations for.  
+--- Even when instanced, BinEvents are *not* deep copied when used in templates or in `deepCopy`, as the reference to them is important.
 ---@class Compost.BinEvent
 ---@field name string The name of the event, mainly for debugging purposes
 ---@field reducer fun(accumulator: any, value: unknown, index: integer, component: table): any A reducer function, used for events for which listeners return values. You can use a function from `compost.reducers` or write your own. Default is `compost.reducers.none`.
@@ -310,6 +324,93 @@ end
 function Bin:announce(event, ...)
     return event:announce(self, ...)
 end
+
+------------------------------------------------------------
+
+--- ### Compost.newTemplate()
+--- Creates a new template for instancing Bins.
+---@param ... Compost.Component An optional list of components to be immediately added to the template
+---@return Compost.Template
+function compost.newTemplate(...)
+    ---@type Compost.Template
+    local template = {
+        components = {}
+    }
+    setmetatable(template, TemplateMT)
+
+    local components = {...}
+    for componentIndex = 1, #components do
+        template:addComponent(components[componentIndex])
+    end
+
+    return template
+end
+
+--- ### Template:addComponent(component, data)
+--- Adds a component to the template, optionally also supplying a table of data which will be *deep* copied into the component when it gets instanced.
+---@param component Compost.Component
+---@param data? table
+---@return Compost.Template self
+function Template:addComponent(component, data)
+    for componentIndex = 1, #self.components do
+        local entry = self.components[componentIndex]
+        if entry.component == component then error("Component '" .. tostring(component) .. "' has already been added to this template", 2) end
+    end
+    self.components[#self.components+1] = {
+        component = component,
+        data = data
+    }
+    return self
+end
+
+--- ### Template:instance(...)
+--- ### Template:newBin(...)
+--- Instances the template, passing in the arguments into its init method, if there is one.
+---@param ... unknown
+---@return Compost.Bin
+function Template:instance(...)
+    local bin = compost.newBin()
+
+    if self.preInit then self.preInit(bin, ...) end
+
+    for componentIndex = 1, #self.components do
+        local entry = self.components[componentIndex]
+        bin:addComponent(entry.component)
+
+        local data = compost.deepCopy(entry.data)
+        if data then
+            for key, value in pairs(data) do
+                bin[entry.component][key] = value
+            end
+        end
+    end
+
+    if self.init then self.init(bin, ...) end
+
+    return bin
+end
+Template.newBin = Template.instance
+
+--- ### Template:setInit(initFn)
+--- Sets the template's constructor function. This can be used to add data to the components in the Bin.
+---@param initFn fun(bin: Compost.Bin, ...)
+---@return Compost.Template self
+function Template:setInit(initFn)
+    self.init = initFn
+    return self
+end
+Template.setConstructor = Template.setInit
+
+--- ### Template:setPreInit(preInitFn)
+--- Sets the template's preInit function. This can be used to add components to the Bin manually if you prefer to do it that way.
+---@param preInitFn fun(bin: Compost.Bin, ...)
+---@return Compost.Template self
+function Template:setPreInit(preInitFn)
+    self.preInit = preInitFn
+    return self
+end
+Template.setPreconstructor = Template.setPreInit
+Template.setPreConstructor = Template.setPreInit
 
 ------------------------------------------------------------
 
