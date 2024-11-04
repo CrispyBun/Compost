@@ -325,6 +325,13 @@ function Bin:announce(event, ...)
     return event:announce(self, ...)
 end
 
+--- ### Bin:clone()
+--- Returns a deep copy of the bin.
+---@return Compost.Bin
+function Bin:clone()
+    return compost.deepCopy(self)
+end
+
 ------------------------------------------------------------
 
 --- ### Compost.newTemplate()
