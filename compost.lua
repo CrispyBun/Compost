@@ -334,9 +334,13 @@ end
 
 ------------------------------------------------------------
 
---- ### Compost.newTemplate()
+--- ### Compost.newTemplate(...mixins)
 --- Creates a new template for instancing Bins.
----@param ... Compost.Component An optional list of components to be immediately added to the template
+--- 
+--- Optionally, you can supply a list of mixins to build the template from.
+--- A mixin can either be a Component, or another Template.
+--- All the components (and their data, in the case of templates) get copied over from mixins. The init methods of other templates do not get copied.
+---@param ... Compost.Component|Compost.Template An optional list of mixins to build the template from.
 ---@return Compost.Template
 function compost.newTemplate(...)
     ---@type Compost.Template
@@ -345,9 +349,20 @@ function compost.newTemplate(...)
     }
     setmetatable(template, TemplateMT)
 
-    local components = {...}
-    for componentIndex = 1, #components do
-        template:addComponent(components[componentIndex])
+    local mixins = {...}
+    for mixinIndex = 1, #mixins do
+        local mixin = mixins[mixinIndex]
+        local mixinType = getmetatable(mixin).__index
+
+        if mixinType == Template then
+            for componentIndex = 1, #mixin.components do
+                local entry = mixin.components[componentIndex]
+                template:addComponent(entry.component, compost.deepCopy(entry.data))
+            end
+        else
+            ---@diagnostic disable-next-line: param-type-mismatch
+            template:addComponent(mixin)
+        end
     end
 
     return template
