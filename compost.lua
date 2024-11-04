@@ -26,6 +26,7 @@ local ComponentSharedMethods = {}
 ---@field name string The name of the event, mainly for debugging purposes
 ---@field reducer fun(accumulator: any, value: unknown, index: integer, component: table): any A reducer function, used for events for which listeners return values. You can use a function from `compost.reducers` or write your own. Default is `compost.reducers.none`.
 ---@field typeChecker? fun(value: any): boolean A function for checking if the listeners are returning the correct type. If not present, no type checking is done. You can use a function from `compost.typeCheckers` or write your own.
+---@field defaultValue? any A value that is returned from announcing the event if no listeners are attached to it. If at least one listener is attached, this value will not be returned.
 local BinEvent = {}
 local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end}
 
@@ -311,6 +312,16 @@ function BinEvent:setTypeChecker(typeCheckerFn)
     return self
 end
 
+--- ### BinEvent:setDefault(value)
+--- Sets the value which the event will return only if it is announced while no listeners are attached.
+---@param value any
+---@return Compost.BinEvent self
+function BinEvent:setDefault(value)
+    self.defaultValue = value
+    return self
+end
+BinEvent.setDefaultValue = BinEvent.setDefault
+
 --- ### BinEvent:announce(bin, ...)
 --- Announces the event to the listeners in the bin. This is called automatically by the bin.  
 --- 
@@ -320,13 +331,15 @@ end
 ---@return unknown
 function BinEvent:announce(bin, ...)
     local events = bin[EVENTS_KEY]
-    if not events[self] then return nil end
+    local listeners = events[self]
+
+    if not listeners then return self.defaultValue end
+    if #listeners == 0 then return self.defaultValue end
 
     local typeChecker = self.typeChecker
     local reducerFn = self.reducer
     local accumulator
 
-    local listeners = events[self]
     for listenerIndex = 1, #listeners do
         local component = listeners[listenerIndex]
 
