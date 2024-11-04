@@ -19,27 +19,16 @@ local BinMT = {__index = Bin}
 ---@field Bin Compost.Bin The bin this component belongs to
 ---@field init? fun(...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
 ---@field destruct? fun() Called when the component is removed from a bin.
-local ComponentBuiltinMethods = {}
+---@field Events? table<string, Compost.BinEvent> A table of events this component defines and announces. This is just a convention you can use, though, as BinEvents can be defined anywhere in your codebase, not just in components.
+local ComponentSharedMethods = {}
 
-------------------------------------------------------------
-
---- ### Component:addBinListener(event, methodName)
---- A shortcut for:
---- ```
---- self.Bin.addListener(event, ComponentDefinition, methodName)
---- ```
---- 
---- Example usage:
---- ```lua
---- function Sound:init()
----     self:addBinListener("Health.Damage", "playDamaged")
---- end
---- ```
----@param event string
----@param methodName string?
-function ComponentBuiltinMethods:addBinListener(event, methodName)
-    self.Bin:addListener(event, self[META_KEY].__index, methodName)
-end
+---@class Compost.BinEvent
+---@field name string The name of the event, mainly for debugging purposes
+---@field reducer fun(accumulator: any, value: unknown, index: integer, component: table): any A reducer function, used for events for which listeners return values. You can use a function from `compost.reducers` or write your own. Default is `compost.reducers.none`.
+---@field typeChecker? fun(value: any): boolean A function for checking if the listeners are returning the correct type. If not present, no type checking is done. You can use a function from `compost.typeCheckers` or write your own.
+---@field defaultValue? any A value that is returned from announcing the event if no listeners are attached to it. If at least one listener is attached, this value will not be returned.
+local BinEvent = {}
+local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end}
 
 ------------------------------------------------------------
 
@@ -56,7 +45,7 @@ end
 --- Position.x = 0
 --- Position.y = 0
 ---
---- return moss.create(Position)
+--- return compost.component(Position)
 --- ```
 --- ---
 --- #### main.lua
@@ -68,13 +57,43 @@ end
 ---@param component T
 ---@return T
 function compost.createComponent(component)
-    for key, value in pairs(ComponentBuiltinMethods) do
-        component[key] = value
+    for key, value in pairs(ComponentSharedMethods) do
+        component[key] = component[key] == nil and value or component[key]
     end
     component[META_KEY] = {__index = component}
     return component
 end
 compost.component = compost.createComponent
+
+--- ### Component:addBinListener(event)
+--- A shortcut for:
+--- ```
+--- self.Bin.addListener(event, Component)
+--- ```
+--- 
+--- Example usage:
+--- ```lua
+--- function Sound:init()
+---     self:addBinListener(DamageEvent)
+--- end
+--- 
+--- Sound[DamageEvent] = function(self)
+---    -- play hurt sound
+--- end
+--- 
+--- -- or:
+--- 
+--- function Sound:playDamaged()
+---   -- play hurt sound
+--- end
+--- Sound[DamageEvent] = Sound.playDamaged
+--- ```
+---@param event Compost.BinEvent
+function ComponentSharedMethods:addBinListener(event)
+    return self.Bin:addListener(event, self[META_KEY].__index --[[this is how you get the component definition table from an instance lol]])
+end
+
+------------------------------------------------------------
 
 --- ### compost.newBin()
 --- Creates a new empty Bin with no components.
@@ -85,8 +104,6 @@ function compost.newBin()
     }
     return setmetatable(bin, BinMT)
 end
-
-------------------------------------------------------------
 
 --- ### Bin:addComponent(component)
 --- Adds a component to the bin.
@@ -123,16 +140,8 @@ function Bin:removeComponent(component)
     end
 
     local events = self[EVENTS_KEY]
-    for event, listeners in pairs(events) do
-        local listenerIndex = 1
-        while listenerIndex <= #listeners do
-            local listener = listeners[listenerIndex]
-            if listener[1] == component then
-                table.remove(listeners, listenerIndex)
-            else
-                listenerIndex = listenerIndex + 1
-            end
-        end
+    for event in pairs(events) do
+        self:removeListener(event, component)
     end
 
     self[component] = nil
@@ -170,35 +179,49 @@ function Bin:expectComponent(component)
     return instance
 end
 
---- ### Bin:addListener(event, component, methodName)
---- Adds a listener to an event. The listener is a component in the same bin and a method within it.
---- If the method name isn't specified, it becomes the same as the event name.
+--- ### Bin:addListener(event, component)
+--- Attaches the component as a listener to an event (assuming the function for the listener is defined in the component).
 --- 
 --- Example usage:
 --- ```
---- bin:addListener("Health.Damage", Sound, "playDamaged")
+--- function SoundComponent:init()
+---     -- Attach the listener each time the component is added to a bin
+---     self.Bin:addListener(DamageEvent, SoundComponent)
+--- end
+--- 
+--- SoundComponent[DamageEvent] = function(self) -- Define the listener
+---     -- play hurt sound
+--- end
+--- 
+--- -- or:
+--- 
+--- function SoundComponent:playDamaged()
+---    -- play hurt sound
+--- end
+--- SoundComponent[DamageEvent] = SoundComponent.playDamaged -- Define the listener
 --- ```
----@param event string
+---@param event Compost.BinEvent
 ---@param component Compost.Component
----@param methodName? string
-function Bin:addListener(event, component, methodName)
-    methodName = methodName or event
+function Bin:addListener(event, component)
+    if event == nil then return error("bad argument #1 to 'Bin:addListener' (event is nil)") end
 
     local events = self[EVENTS_KEY]
     if not events[event] then events[event] = {} end
 
     local listeners = events[event]
-    listeners[#listeners+1] = {component, methodName}
+
+    for listenerIndex = 1, #listeners do
+        if listeners[listenerIndex] == component then return error("Component '" .. tostring(component) .. "' is already attached as a listener for event '" .. tostring(event) .. "'") end
+    end
+
+    listeners[#listeners+1] = component
 end
 
---- ### Bin:removeListener(event, component, methodName)
---- Removes a listener from an event.
----@param event string
+--- ### Bin:removeListener(event, component)
+--- Removes a listener from an event. Does nothing if the listener is not present or if the event doesn't exist.
+---@param event Compost.BinEvent
 ---@param component Compost.Component
----@param methodName? string
-function Bin:removeListener(event, component, methodName)
-    methodName = methodName or event
-
+function Bin:removeListener(event, component)
     local events = self[EVENTS_KEY]
     if not events[event] then return end
 
@@ -206,7 +229,7 @@ function Bin:removeListener(event, component, methodName)
     for listenerIndex = 1, #listeners do
         local listener = listeners[listenerIndex]
 
-        if listener[1] == component and listener[2] == methodName then
+        if listener == component then
             table.remove(listeners, listenerIndex)
             return
         end
@@ -214,15 +237,54 @@ function Bin:removeListener(event, component, methodName)
 end
 
 --- ### Bin:announce(event, ...)
---- Announces an event with the given arguments.
----@param event string
+--- Announces an event with the given arguments.  
+--- If the event has a reducer function set, the reduced results from the listeners will be returned.
+---@param event Compost.BinEvent
 ---@param ... unknown
 function Bin:announce(event, ...)
-    return self:announceAndCollect(event, compost.reducers.none, ...)
+    return event:announce(self, ...)
 end
 
---- ### Bin:announceAndCollect(event, reducerFn, ...)
---- Announces an event with the given arguments, and collects the results from the listeners using a reducer function.
+------------------------------------------------------------
+
+--- ### compost.newEvent()
+--- Creates a new bin event object.  
+--- 
+--- Example usage:
+--- ```
+--- HealthComponent.Events = {
+---     GetHealth = compost.newBinEvent(),
+---     Damage = compost.newBinEvent(),
+---     Death = compost.newBinEvent(),
+---     Heal = compost.newBinEvent(),
+--- }
+--- ```
+---@param reducer? fun(accumulator: any, value: unknown, index: integer, component: table): any
+---@param typeChecker? fun(value: any): boolean
+---@param name? string
+---@return Compost.BinEvent
+function compost.newEvent(reducer, typeChecker, name)
+    ---@type Compost.BinEvent
+    local event = {
+        name = name or "Unnamed Event",
+        reducer = reducer or compost.reducers.none,
+        typeChecker = typeChecker,
+    }
+    return setmetatable(event, BinEventMT)
+end
+compost.newBinEvent = compost.newEvent
+
+--- ### BinEvent:setName(name)
+--- Sets the name of the event, mainly used for debugging purposes.
+---@param name string
+---@return Compost.BinEvent self
+function BinEvent:setName(name)
+    self.name = name
+    return self
+end
+
+--- ### BinEvent:setReducer(reducerFn)
+--- Sets the reducer function for the event to collect results from listeners.
 --- 
 --- The reducer function gets called for each listener, and gets passed:
 --- * accumulator - The accumulator value (`nil` on the first call)
@@ -232,28 +294,62 @@ end
 --- 
 --- The return value of the reducer will be the value of the accumulator for the next call. The final accumulator value is returned by this function.  
 --- 
---- Useful reducer functions can be found in `compost.reducers`.
----@param event string
+--- Useful reducer functions can be found in `compost.reducers`. If you write your own reducer, it should return the same value no matter which order the listeners are in.
 ---@param reducerFn fun(accumulator: any, value: unknown, index: integer, component: table): any
+---@return Compost.BinEvent self
+function BinEvent:setReducer(reducerFn)
+    self.reducer = reducerFn
+    return self
+end
+
+--- ### BinEvent:setTypeChecker(typeCheckerFn)
+--- Sets the type checker function for the event to check if each listener is returning the correct type.  
+--- Useful type checker functions can be found in `compost.typeCheckers`.
+---@param typeCheckerFn fun(value: any): boolean
+---@return Compost.BinEvent self
+function BinEvent:setTypeChecker(typeCheckerFn)
+    self.typeChecker = typeCheckerFn
+    return self
+end
+
+--- ### BinEvent:setDefault(value)
+--- Sets the value which the event will return only if it is announced while no listeners are attached.
+---@param value any
+---@return Compost.BinEvent self
+function BinEvent:setDefault(value)
+    self.defaultValue = value
+    return self
+end
+BinEvent.setDefaultValue = BinEvent.setDefault
+
+--- ### BinEvent:announce(bin, ...)
+--- Announces the event to the listeners in the bin. This is called automatically by the bin.  
+--- 
+--- It is possible to override this function for an event to change its behavior, but that's mostly for advanced usage. Regular events should be fine for most cases.
+---@param bin Compost.Bin
 ---@param ... unknown
 ---@return unknown
-function Bin:announceAndCollect(event, reducerFn, ...)
-    local events = self[EVENTS_KEY]
-    if not events[event] then return nil end
+function BinEvent:announce(bin, ...)
+    local events = bin[EVENTS_KEY]
+    local listeners = events[self]
 
+    if not listeners then return self.defaultValue end
+    if #listeners == 0 then return self.defaultValue end
+
+    local typeChecker = self.typeChecker
+    local reducerFn = self.reducer
     local accumulator
 
-    local listeners = events[event]
     for listenerIndex = 1, #listeners do
-        local listener = listeners[listenerIndex]
-        local component = listener[1]
-        local method = listener[2]
+        local component = listeners[listenerIndex]
 
-        if not self[component] then error("Component '" .. tostring(component) .. "' is set as a listener but isn't attached to the bin", 2) end
-        if not self[component][method] then error("Listening method '" .. tostring(method) .. "' doesn't exist in component '" .. tostring(component) .. "'", 2) end
+        if not bin[component] then error("[Error in listener] Couldn't announce event, component '" .. tostring(component) .. "' is set as a listener but isn't attached to the bin", 2) end
+        if not bin[component][self] then error("[Error in listener] Couldn't announce event, listening component '" .. tostring(component) .. "' doesn't define a listener function for the event '" .. tostring(self) .. "'", 2) end
 
-        local out = self[component][method](self[component], ...)
-        accumulator = reducerFn(accumulator, out, listenerIndex, self[component])
+        local receivedValue = bin[component][self](bin[component], ...)
+        if typeChecker and not typeChecker(receivedValue) then error("[Error in listener] Error while announcing event, listening component '" .. tostring(component) .. "' returned unexpected value according to the typeChecker in event '" .. tostring(self) .. "'", 2) end
+
+        accumulator = reducerFn(accumulator, receivedValue, listenerIndex, bin[component])
     end
 
     return accumulator
@@ -261,7 +357,7 @@ end
 
 ------------------------------------------------------------
 
---- Useful reducer functions for use with `Bin:announceAndCollect()`.
+--- Useful reducer functions for use with events.
 compost.reducers = {}
 
 ---@return nil
@@ -332,6 +428,29 @@ end
 ---@return number
 function compost.reducers.sum(accumulator, value)
     return (accumulator or 0) + value
+end
+
+------------------------------------------------------------
+
+--- Some handy type checking functions for use with events.
+compost.typeCheckers = {}
+
+---@param value any
+---@return boolean
+compost.typeCheckers.isNil = function(value)
+    return value == nil
+end
+
+---@param value any
+---@return boolean
+compost.typeCheckers.isNotNil = function(value)
+    return value ~= nil
+end
+
+---@param value any
+---@return boolean
+compost.typeCheckers.isNumber = function(value)
+    return type(value) == "number"
 end
 
 ------------------------------------------------------------
