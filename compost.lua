@@ -17,6 +17,7 @@ local BinMT = {__index = Bin}
 --- If you're using annotations, your component definitions should inherit from this class
 ---@class Compost.Component
 ---@field Bin Compost.Bin The bin this component belongs to
+---@field Name? string The name of the component, mainly used for debugging purposes
 ---@field init? fun(...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
 ---@field destruct? fun() Called when the component is removed from a bin.
 ---@field Events? table<string, Compost.BinEvent> A table of events this component defines and announces. This is just a convention you can use, though, as BinEvents can be defined anywhere in your codebase, not just in components.
@@ -29,6 +30,11 @@ local ComponentSharedMethods = {}
 ---@field defaultValue? any A value that is returned from announcing the event if no listeners are attached to it. If at least one listener is attached, this value will not be returned.
 local BinEvent = {}
 local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end}
+
+---@param component Compost.Component
+local function getComponentName(component)
+    return component:getComponentName()
+end
 
 ------------------------------------------------------------
 
@@ -45,7 +51,7 @@ local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.
 --- Position.x = 0
 --- Position.y = 0
 ---
---- return compost.component(Position)
+--- return compost.component(Position, "Position")
 --- ```
 --- ---
 --- #### main.lua
@@ -55,12 +61,22 @@ local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.
 --- ```
 ---@generic T : Compost.Component
 ---@param component T
+---@param name? string
 ---@return T
-function compost.createComponent(component)
+function compost.createComponent(component, name)
     for key, value in pairs(ComponentSharedMethods) do
         component[key] = component[key] == nil and value or component[key]
     end
+    component--[[@as Compost.Component]].Name = name
+
+    -- Metatable for the definition itself
+    local definitionMetatable = getmetatable(component) or {} -- Will error on protected metatables
+    if not definitionMetatable.__tostring then definitionMetatable.__tostring = getComponentName end
+    setmetatable(component, definitionMetatable)
+
+    -- Metatable for the instances
     component[META_KEY] = {__index = component}
+
     return component
 end
 compost.component = compost.createComponent
@@ -91,6 +107,10 @@ compost.component = compost.createComponent
 ---@param event Compost.BinEvent
 function ComponentSharedMethods:addBinListener(event)
     return self.Bin:addListener(event, self[META_KEY].__index --[[this is how you get the component definition table from an instance lol]])
+end
+
+function ComponentSharedMethods:getComponentName()
+    return self.Name or "Unnamed Component"
 end
 
 ------------------------------------------------------------
