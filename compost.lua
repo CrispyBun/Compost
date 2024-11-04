@@ -1,17 +1,20 @@
 local compost = {}
 
-local EVENTS_KEY = {}
-local META_KEY = {}
+local EVENTS_KEY = setmetatable({}, {__tostring = function () return "[Events]" end, __preventdeepcopy = true})
+local META_KEY = setmetatable({}, {__tostring = function () return "[Metatable]" end, __preventdeepcopy = true})
 
 compost.EVENTS_KEY = EVENTS_KEY -- Used to get the list of events from a Bin
 compost.META_KEY = META_KEY -- Used to get the metatable of a component used for its instances
 
 ------------------------------------------------------------
 
+---@return table
+local function getClassBase() return setmetatable({}, {__preventdeepcopy = true}) end
+
 --- An object holding instanced components  
 ---@class Compost.Bin
 ---@field [table] table
-local Bin = {}
+local Bin = getClassBase()
 local BinMT = {__index = Bin}
 
 --- If you're using annotations, your component definitions should inherit from this class
@@ -20,20 +23,62 @@ local BinMT = {__index = Bin}
 ---@field Name? string The name of the component, mainly used for debugging purposes
 ---@field init? fun(...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
 ---@field destruct? fun() Called when the component is removed from a bin.
----@field Events? table<string, Compost.BinEvent> A table of events this component defines and announces. This is just a convention you can use, though, as BinEvents can be defined anywhere in your codebase, not just in components.
-local ComponentSharedMethods = {}
+---@field Events? table<string, Compost.BinEvent> A table of events this component defines and announces. This should be the place where events that a component controls should be defined, though BinEvents can be defined anywhere in your codebase. Putting events in this table is just a convention.
+local ComponentSharedMethods = getClassBase()
 
+--- An event triggered on the entire bin, which components can add their own implementations for
 ---@class Compost.BinEvent
 ---@field name string The name of the event, mainly for debugging purposes
 ---@field reducer fun(accumulator: any, value: unknown, index: integer, component: table): any A reducer function, used for events for which listeners return values. You can use a function from `compost.reducers` or write your own. Default is `compost.reducers.none`.
 ---@field typeChecker? fun(value: any): boolean A function for checking if the listeners are returning the correct type. If not present, no type checking is done. You can use a function from `compost.typeCheckers` or write your own.
 ---@field defaultValue? any A value that is returned from announcing the event if no listeners are attached to it. If at least one listener is attached, this value will not be returned.
-local BinEvent = {}
-local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end}
+local BinEvent = getClassBase()
+local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end, __preventdeepcopy = true}
+
+------------------------------------------------------------
 
 ---@param component Compost.Component
 local function getComponentName(component)
     return component:getComponentName()
+end
+
+--- Returns a deep copy of the input value.  
+--- 
+--- Notes on metatables:
+--- * If a table with a protected metatable is present, this function will error.
+--- * If a table with a metatable is present, the metatable will also be assigned to the copied table (but the metatable itself will NOT be copied, only referenced).
+--- * If a table has a metatable with the key `__preventdeepcopy` set to a truthy value, the table will not be copied, and only referenced.
+---@generic T
+---@param v T The value to copy
+---@param _seenTables? table
+---@return T
+function compost.deepCopy(v, _seenTables)
+    if type(v) == "table" then
+        _seenTables = _seenTables or {}
+
+        if _seenTables[v] then
+            return _seenTables[v]
+        end
+
+        local mt = getmetatable(v)
+        if mt and mt.__preventdeepcopy then return v end
+
+        local copiedTable = {}
+        _seenTables[v] = copiedTable
+
+        for key, value in pairs(v) do
+            local copiedKey = compost.deepCopy(key, _seenTables)
+            local copiedValue = compost.deepCopy(value, _seenTables)
+            copiedTable[copiedKey] = copiedValue
+        end
+
+        if mt then
+            setmetatable(copiedTable, mt)
+        end
+
+        return copiedTable
+    end
+    return v
 end
 
 ------------------------------------------------------------
@@ -72,6 +117,7 @@ function compost.createComponent(component, name)
     -- Metatable for the definition itself
     local definitionMetatable = getmetatable(component) or {} -- Will error on protected metatables
     if not definitionMetatable.__tostring then definitionMetatable.__tostring = getComponentName end
+    definitionMetatable.__preventdeepcopy = true
     setmetatable(component, definitionMetatable)
 
     -- Metatable for the instances
