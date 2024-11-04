@@ -645,5 +645,6 @@ end
 ------------------------------------------------------------
 
 compost.Bin = Bin -- Bin class exposed for the ability to potentially add more methods
+compost.ComponentSharedMethods = ComponentSharedMethods -- Functions added to this table are injected into all created component definitions
 
 return compost
