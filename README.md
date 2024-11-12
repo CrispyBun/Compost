@@ -43,8 +43,9 @@ bin:addComponent(Health, 20)
 
 print(bin[Health].health) --> 20
 ```
+Rather than indexing the component directly, though, it's better to use the helpful methods `bin:getComponent()`, `bin:expectComponent()` and `bin:forceComponent()` instead.
 
-## The Template
+## Templates
 Adding components to a bin manually makes it hard to consistently instance bins for specific jobs.
 Templates exist to define the way a specific bin should look like, including the data that goes in its components.
 
@@ -69,7 +70,7 @@ end)
 return template
 ```
 
-## The Event
+## Events
 Eventually, you're going to want to tie the behavior of one component to the behavior of another, which is what Events are for.
 
 You can think of Events as a sort of Interface a component leaves for other components to implement. Events even allow for return values, which will be covered in the documentation.
