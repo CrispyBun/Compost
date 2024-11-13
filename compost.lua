@@ -340,6 +340,27 @@ end
 --- Optionally, you can supply a list of mixins to build the template from.
 --- A mixin can either be a Component, or another Template.
 --- All the components (and their data, in the case of templates) get copied over from mixins. The init methods of other templates do not get copied.
+--- 
+--- Example usage:
+--- ```
+--- local template1 = compost.newTemplate(SpriteComponent, MovementComponent, EnemyComponent)
+--- 
+--- local template2 = compost.newTemplate(gameObjectTemplate, EnemyComponent)
+--- 
+--- local template3 = compost.newTemplate()
+--- template3:addComponent(MovementComponent, {speed = 100})
+--- 
+--- local template4 = compost.newTemplate()
+--- function template4.preInit(bin, ...)
+---     -- The use of preInit to add components isn't necessary,
+---     -- it's just optional for when you want to separate the adding of the components
+---     -- and the setting of their data.
+---     bin:addComponent(MovementComponent)
+--- end
+--- function template4.init(bin, ...)
+---     bin:expectComponent(MovementComponent).speed = 100
+--- end
+--- ```
 ---@param ... Compost.Component|Compost.Template An optional list of mixins to build the template from.
 ---@return Compost.Template
 function compost.newTemplate(...)
