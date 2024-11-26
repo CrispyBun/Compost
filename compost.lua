@@ -384,7 +384,7 @@ function compost.newTemplate(...)
         if mixinType == Template then
             for componentIndex = 1, #mixin.components do
                 local entry = mixin.components[componentIndex]
-                template:addComponent(entry.component, compost.deepCopy(entry.data))
+                template:addComponent(entry.component, unpack(entry.constructorParams))
             end
         else
             ---@diagnostic disable-next-line: param-type-mismatch
@@ -396,7 +396,9 @@ function compost.newTemplate(...)
 end
 
 --- ### Template:addComponent(component, ...)
---- Adds a component to the template, optionally also supplying constructor params for the component's `init` method.  
+--- Adds a component to the template, optionally also supplying constructor params for the component's `init` method (there must be no `nil`s in the middle of the params however).
+--- 
+--- If the component is already present, the constructor params will be overwritten, but the data will be kept.
 --- 
 --- Example usage:
 --- ```lua
@@ -406,11 +408,65 @@ end
 ---@param ... unknown
 ---@return Compost.Template self
 function Template:addComponent(component, ...)
-    self.components[#self.components+1] = {
+    local components = self.components
+
+    for componentIndex = 1, #components do
+        local entry = components[componentIndex]
+        if entry.component == component then
+            entry.constructorParams = {...}
+            return self
+        end
+    end
+
+    components[#self.components+1] = {
         component = component,
         constructorParams = {...}
     }
     return self
+end
+
+--- ### Template:addComponentParams(component, ...)
+--- Adds constructor params to the given component in the template.
+---@param component Compost.Component
+---@param ... unknown
+---@return Compost.Template self
+function Template:addComponentParams(component, ...)
+    local components = self.components
+    for componentIndex = 1, #components do
+        local entry = components[componentIndex]
+        if entry.component == component then
+            entry.constructorParams = {...}
+            return self
+        end
+    end
+    error("Component '" .. tostring(component) .. "' is not in the template", 2)
+end
+
+--- ### Template:addComponentData(component, data)
+--- Adds data to the given component in the template to be deep copied into the component upon instancing.
+--- 
+--- Example usage:
+--- ```lua
+--- template:addComponentData(Position, {x = 100, y = 100})
+--- ```
+---@param component Compost.Component
+---@param data table
+---@return Compost.Template self
+function Template:addComponentData(component, data)
+    local components = self.components
+    for componentIndex = 1, #components do
+        local entry = components[componentIndex]
+        if entry.component == component then
+
+            entry.data = entry.data or {}
+            for key, value in pairs(data) do
+                entry.data[key] = value
+            end
+
+            return self
+        end
+    end
+    error("Component '" .. tostring(component) .. "' is not in the template", 2)
 end
 
 --- ### Template:instance(...)
@@ -423,7 +479,7 @@ function Template:instance(...)
 
     if self.preInit then self.preInit(bin, ...) end
 
-    for componentIndex = #self.components, 1, -1 do
+    for componentIndex = 1, #self.components do
         local entry = self.components[componentIndex]
         if not bin[entry.component] then
             bin:addComponent(entry.component, unpack(entry.constructorParams))
@@ -432,8 +488,7 @@ function Template:instance(...)
         local data = compost.deepCopy(entry.data)
         if data then
             for key, value in pairs(data) do
-                local currentValue = bin[entry.component][key]
-                bin[entry.component][key] = currentValue == nil and value or currentValue
+                bin[entry.component][key] = value
             end
         end
     end
