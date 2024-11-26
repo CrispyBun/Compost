@@ -1,5 +1,8 @@
 local compost = {}
 
+---@diagnostic disable-next-line: deprecated
+local unpack = unpack or table.unpack
+
 local EVENTS_KEY = setmetatable({}, {__tostring = function () return "[Events]" end, __preventdeepcopy = true})
 local META_KEY = setmetatable({}, {__tostring = function () return "[Metatable]" end, __preventdeepcopy = true})
 
@@ -37,6 +40,7 @@ local TemplateMT = {__index = Template, __preventdeepcopy = true}
 
 ---@class Compost.TemplateComponentData
 ---@field component Compost.Component The component to be instanced
+---@field constructorParams any[] Parameters for the component's constructor (init method)
 ---@field data? table Table of data to be *deep* copied into the instanced component
 
 --- An event triggered on the entire bin, which components can add their own implementations for.  
@@ -339,7 +343,7 @@ end
 --- 
 --- Optionally, you can supply a list of mixins to build the template from.
 --- A mixin can either be a Component, or another Template.
---- All the components (and their data, in the case of templates) get copied over from mixins. The init methods of other templates do not get copied.
+--- All the components (and their data, in the case of templates) get copied over from mixins. The main init methods of other templates do NOT get copied.
 --- 
 --- Example usage:
 --- ```
@@ -348,7 +352,7 @@ end
 --- local template2 = compost.newTemplate(gameObjectTemplate, EnemyComponent)
 --- 
 --- local template3 = compost.newTemplate()
---- template3:addComponent(MovementComponent, {speed = 100})
+--- template3:addComponent(MovementComponent, 100) -- 100 as a parameter for the component's `init`
 --- 
 --- local template4 = compost.newTemplate()
 --- function template4.preInit(bin, ...)
@@ -389,19 +393,24 @@ function compost.newTemplate(...)
     return template
 end
 
---- ### Template:addComponent(component, data)
---- Adds a component to the template, optionally also supplying a table of data which will be *deep* copied into the component when it gets instanced.
+--- ### Template:addComponent(component, ...)
+--- Adds a component to the template, optionally also supplying constructor params for the component's `init` method.  
+--- 
+--- Example usage:
+--- ```lua
+--- template:addComponent(Position, 100, 100)
+--- ```
 ---@param component Compost.Component
----@param data? table
+---@param ... unknown
 ---@return Compost.Template self
-function Template:addComponent(component, data)
-    for componentIndex = 1, #self.components do
+function Template:addComponent(component, ...)
+    for componentIndex = 1, #self.components do -- todo: dont do this error, just overwrite
         local entry = self.components[componentIndex]
         if entry.component == component then error("Component '" .. tostring(component) .. "' has already been added to this template", 2) end
     end
     self.components[#self.components+1] = {
         component = component,
-        data = data
+        constructorParams = {...}
     }
     return self
 end
@@ -418,7 +427,7 @@ function Template:instance(...)
 
     for componentIndex = 1, #self.components do
         local entry = self.components[componentIndex]
-        bin:addComponent(entry.component)
+        bin:addComponent(entry.component, unpack(entry.constructorParams))
 
         local data = compost.deepCopy(entry.data)
         if data then
