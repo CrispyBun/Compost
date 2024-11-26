@@ -3,8 +3,8 @@ local compost = {}
 ---@diagnostic disable-next-line: deprecated
 local unpack = unpack or table.unpack
 
-local EVENTS_KEY = setmetatable({}, {__tostring = function () return "[Events]" end, __preventdeepcopy = true})
-local META_KEY = setmetatable({}, {__tostring = function () return "[Metatable]" end, __preventdeepcopy = true})
+local EVENTS_KEY = setmetatable({}, {__tostring = function () return "[Events]" end, __uniquereference = true})
+local META_KEY = setmetatable({}, {__tostring = function () return "[Metatable]" end, __uniquereference = true})
 
 compost.EVENTS_KEY = EVENTS_KEY -- Used to get the list of events from a Bin
 compost.META_KEY = META_KEY -- Used to get the metatable of a component used for its instances
@@ -12,7 +12,7 @@ compost.META_KEY = META_KEY -- Used to get the metatable of a component used for
 ------------------------------------------------------------
 
 ---@return table
-local function getClassBase() return setmetatable({}, {__preventdeepcopy = true}) end
+local function getClassBase() return setmetatable({}, {__uniquereference = true}) end
 
 --- An object holding instanced components  
 ---@class Compost.Bin
@@ -36,7 +36,7 @@ local ComponentSharedMethods = getClassBase()
 ---@field preInit? fun(bin: Compost.Bin, ...) Called when a bin is instancing from the template, but before any components have been added to it. Arguments are the same as for init.
 ---@field components Compost.TemplateComponentData[]
 local Template = getClassBase()
-local TemplateMT = {__index = Template, __preventdeepcopy = true}
+local TemplateMT = {__index = Template, __uniquereference = true}
 
 ---@class Compost.TemplateComponentData
 ---@field component Compost.Component The component to be instanced
@@ -51,7 +51,7 @@ local TemplateMT = {__index = Template, __preventdeepcopy = true}
 ---@field typeChecker? fun(value: any): boolean A function for checking if the listeners are returning the correct type. If not present, no type checking is done. You can use a function from `compost.typeCheckers` or write your own.
 ---@field defaultValue? any A value that is returned from announcing the event if no listeners are attached to it. If at least one listener is attached, this value will not be returned.
 local BinEvent = getClassBase()
-local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end, __preventdeepcopy = true}
+local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end, __uniquereference = true}
 
 ------------------------------------------------------------
 
@@ -65,7 +65,7 @@ end
 --- Notes on metatables:
 --- * If a table with a protected metatable is present, this function will error.
 --- * If a table with a metatable is present, the metatable will also be assigned to the copied table (but the metatable itself will NOT be copied, only referenced).
---- * If a table has a metatable with the key `__preventdeepcopy` set to a truthy value, the table will not be copied, and only referenced.
+--- * If a table has a metatable with the key `__uniquereference` set to a truthy value, the table will not be copied, and only referenced (the field indicates copying the value makes no sense - mainly used for types, keys, class definitions).
 ---@generic T
 ---@param v T The value to copy
 ---@param _seenTables? table
@@ -79,7 +79,7 @@ function compost.deepCopy(v, _seenTables)
         end
 
         local mt = getmetatable(v)
-        if mt and mt.__preventdeepcopy then return v end
+        if mt and mt.__uniquereference then return v end
 
         local copiedTable = {}
         _seenTables[v] = copiedTable
@@ -135,7 +135,7 @@ function compost.createComponent(component, name)
     -- Metatable for the definition itself
     local definitionMetatable = getmetatable(component) or {} -- Will error on protected metatables
     if not definitionMetatable.__tostring then definitionMetatable.__tostring = getComponentName end
-    definitionMetatable.__preventdeepcopy = true
+    definitionMetatable.__uniquereference = true
     setmetatable(component, definitionMetatable)
 
     -- Metatable for the instances
