@@ -196,6 +196,8 @@ end
 ---@param ... unknown Arguments to the component's `init` method
 ---@return T component
 function Bin:addComponent(component, ...)
+    if self[component] then error("Component '" .. tostring(component) .. "' is already present in the bin", 2) end
+
     ---@type Compost.Component
     local instance = {
         Bin = self,
@@ -404,10 +406,6 @@ end
 ---@param ... unknown
 ---@return Compost.Template self
 function Template:addComponent(component, ...)
-    for componentIndex = 1, #self.components do -- todo: dont do this error, just overwrite
-        local entry = self.components[componentIndex]
-        if entry.component == component then error("Component '" .. tostring(component) .. "' has already been added to this template", 2) end
-    end
     self.components[#self.components+1] = {
         component = component,
         constructorParams = {...}
@@ -425,14 +423,17 @@ function Template:instance(...)
 
     if self.preInit then self.preInit(bin, ...) end
 
-    for componentIndex = 1, #self.components do
+    for componentIndex = #self.components, 1, -1 do
         local entry = self.components[componentIndex]
-        bin:addComponent(entry.component, unpack(entry.constructorParams))
+        if not bin[entry.component] then
+            bin:addComponent(entry.component, unpack(entry.constructorParams))
+        end
 
         local data = compost.deepCopy(entry.data)
         if data then
             for key, value in pairs(data) do
-                bin[entry.component][key] = value
+                local currentValue = bin[entry.component][key]
+                bin[entry.component][key] = currentValue == nil and value or currentValue
             end
         end
     end
