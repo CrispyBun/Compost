@@ -2,12 +2,15 @@
 Compost is a Lua library for component-based development (CBD).
 It is designed to be conceptually easy to grasp for people familiar with OOP, while replacing inheritance with composition.
 
-Compost puts importance on the [single-responsibility principle](https://en.m.wikipedia.org/wiki/Single-responsibility_principle) and [polymorphism](https://en.m.wikipedia.org/wiki/Polymorphism_(computer_science)), providing features to easily achieve both.
+A basic overview of compost's features is in this readme, at the end of which a more detailed documentation and proper usage guide can be found.
 
-A basic overview of compost's features lays below, after which a more detailed documentation and proper usage guide can be found.
+## Feature summary
+Compost's entire mentality is that there's no such thing as what an object *is*, only what it's *made of*. None of your code is ever tied to the specific definition of an object, but instead to a specific behavior (e.g. you don't care if something *is* an entity, you care if it *has* a health and position component).
+
+Compost also puts importance on the [single-responsibility principle](https://en.m.wikipedia.org/wiki/Single-responsibility_principle) and [polymorphism](https://en.m.wikipedia.org/wiki/Polymorphism_(computer_science)), providing features to easily achieve both.
 
 ## Components
-Components are packages of data and methods. They inherit from the `Compost.Component` class, whose fields are injected into components upon creation.
+Components are packages of data and methods. They inherit from the `Compost.Component` class, whose fields are injected into the components.
 
 ```lua
 -- components/Health.lua
@@ -31,7 +34,9 @@ return compost.component(Health)
 ```
 
 ## The Bin
-When instanced, components are always part of a *bin*, an object that holds components which define its behavior. A component cannot exist without a bin.
+When instanced, components are always part of a *bin*, an object that holds components which together define behavior. A component cannot exist without a bin.
+
+Components in a bin are in no order, and they even may be added or removed at will at runtime to transform a bin's behavior.
 
 ```lua
 -- main.lua
@@ -59,8 +64,11 @@ local Hitbox = require 'components.Hitbox'
 -- Immediately add components when creating template
 local template = compost.newTemplate(Sprite, Position)
 
--- Or add components to it alongside data that will be deep copied into the component after instancing
-template:addComponent(Hitbox, {width = 0, height = 0})
+-- Or add components to it later (where you can also supply constructor arguments)
+template:addComponent(Hitbox, 0, 0)
+
+-- It's also possible to add data to components which will be deep copied into them upon instancing
+template:addComponentData(Hitbox, {width = 10, height = 10})
 
 -- The template's constructor can also be used to fill in data
 template:setInit(function(bin)
