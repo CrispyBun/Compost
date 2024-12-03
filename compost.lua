@@ -351,21 +351,29 @@ end
 --- 
 --- Example usage:
 --- ```
+--- -- Create a template from a set of components
 --- local template1 = compost.newTemplate(SpriteComponent, MovementComponent, EnemyComponent)
 --- 
+--- -- Create a template from a mix of components and other templates
 --- local template2 = compost.newTemplate(gameObjectTemplate, EnemyComponent)
 --- 
+--- -- Add a component to a template along with constructor parameters for it
 --- local template3 = compost.newTemplate()
 --- template3:addComponent(MovementComponent, 100) -- 100 as a parameter for the component's `init`
 --- 
---- local template4 = compost.newTemplate()
---- function template4.preInit(bin, ...)
+--- -- Add data to a component in a template which will be deep copied to it upon instancing
+--- local template4 = compost.newTemplate(MovementComponent)
+--- template4:addComponentData(MovementComponent, {speed = 100})
+--- 
+--- -- Add components and/or data to templates programatically (these functions will not be inherited from mixins)
+--- local template5 = compost.newTemplate()
+--- function template5.preInit(bin, ...)
 ---     -- The use of preInit to add components isn't necessary,
 ---     -- it's just optional for when you want to separate the adding of the components
 ---     -- and the setting of their data.
 ---     bin:addComponent(MovementComponent)
 --- end
---- function template4.init(bin, ...)
+--- function template5.init(bin, ...)
 ---     bin:expectComponent(MovementComponent).speed = 100
 --- end
 --- ```
