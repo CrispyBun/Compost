@@ -640,6 +640,15 @@ function BinEvent:announce(bin, ...)
     return accumulator
 end
 
+--- ### BinEvent:getListenerCount(bin)
+--- Gets the amount of listeners attached to the event in the given bin.
+---@param bin Compost.Bin
+function BinEvent:getListenerCount(bin)
+    local listeners = bin[EVENTS_KEY][self]
+    if not listeners then return 0 end
+    return #listeners
+end
+
 ------------------------------------------------------------
 
 --- Useful reducer functions for use with events.
