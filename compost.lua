@@ -60,6 +60,14 @@ local function getComponentName(component)
     return component:getComponentName()
 end
 
+local ComponentMT = {
+    __index = ComponentSharedMethods,
+    __tostring = getComponentName,
+    __uniquereference = true
+}
+
+------------------------------------------------------------
+
 --- Returns a deep copy of the input value.  
 --- 
 --- Notes on metatables:
@@ -127,18 +135,10 @@ end
 ---@param name? string
 ---@return T
 function compost.createComponent(component, name)
-    for key, value in pairs(ComponentSharedMethods) do
-        component[key] = component[key] == nil and value or component[key]
-    end
-
     name = name or component.Name
     component--[[@as Compost.Component]].Name = name
 
-    -- Metatable for the definition itself
-    local definitionMetatable = getmetatable(component) or {} -- Will error on protected metatables
-    if not definitionMetatable.__tostring then definitionMetatable.__tostring = getComponentName end
-    definitionMetatable.__uniquereference = true
-    setmetatable(component, definitionMetatable)
+    setmetatable(component, ComponentMT)
 
     -- Metatable for the instances
     component[META_KEY] = {__index = component}
@@ -389,9 +389,9 @@ function compost.newTemplate(...)
     local mixins = {...}
     for mixinIndex = 1, #mixins do
         local mixin = mixins[mixinIndex]
-        local mixinType = getmetatable(mixin).__index
+        local isTemplate = getmetatable(mixin).__index == Template
 
-        if mixinType == Template then
+        if isTemplate then
             for componentIndex = 1, #mixin.components do
                 local entry = mixin.components[componentIndex]
                 template:addComponent(entry.component, unpack(entry.constructorParams))
