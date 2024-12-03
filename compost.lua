@@ -130,6 +130,8 @@ function compost.createComponent(component, name)
     for key, value in pairs(ComponentSharedMethods) do
         component[key] = component[key] == nil and value or component[key]
     end
+
+    name = name or component.Name
     component--[[@as Compost.Component]].Name = name
 
     -- Metatable for the definition itself
