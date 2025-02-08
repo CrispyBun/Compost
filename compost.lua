@@ -32,7 +32,7 @@ local ComponentSharedMethods = getClassBase()
 --- The main way to consistently instance objects, without having to spam `addComponent` a million times.  
 --- Even when instanced, Templates are *not* deep copied when used in templates or in `deepCopy`.
 ---@class Compost.Template
----@field init? fun(bin: Compost.Bin, ...) Called a bin is instanced from the template
+---@field init? fun(bin: Compost.Bin, ...) Called when a bin is instanced from the template
 ---@field preInit? fun(bin: Compost.Bin, ...) Called when a bin is instancing from the template, but before any components have been added to it. Arguments are the same as for init.
 ---@field components Compost.TemplateComponentData[]
 local Template = getClassBase()
@@ -159,6 +159,8 @@ compost.component = compost.createComponent
 ---     self:addBinListener(DamageEvent)
 --- end
 --- 
+--- ---
+--- 
 --- Sound[DamageEvent] = function(self)
 ---    -- play hurt sound
 --- end
@@ -200,7 +202,7 @@ end
 function Bin:addComponent(component, ...)
     if self[component] then error("Component '" .. tostring(component) .. "' is already present in the bin", 2) end
 
-    ---@type Compost.Component
+    -- new Compost.Component
     local instance = {
         Bin = self,
     }
@@ -277,6 +279,8 @@ end
 ---     self.Bin:addListener(DamageEvent, SoundComponent)
 --- end
 --- 
+--- ---
+--- 
 --- SoundComponent[DamageEvent] = function(self) -- Define the listener
 ---     -- play hurt sound
 --- end
@@ -306,7 +310,7 @@ function Bin:addListener(event, component)
 end
 
 --- ### Bin:removeListener(event, component)
---- Removes a listener from an event. Does nothing if the listener is not present or if the event doesn't exist.
+--- Removes a listener from an event. Does nothing if the listener is not present.
 ---@param event Compost.BinEvent
 ---@param component Compost.Component
 function Bin:removeListener(event, component)
@@ -380,7 +384,7 @@ end
 ---@param ... Compost.Component|Compost.Template An optional list of mixins to build the template from.
 ---@return Compost.Template
 function compost.newTemplate(...)
-    ---@type Compost.Template
+    -- new Compost.Template
     local template = {
         components = {}
     }
@@ -549,7 +553,7 @@ Template.setPreConstructor = Template.setPreInit
 ---@param name? string
 ---@return Compost.BinEvent
 function compost.newEvent(reducer, typeChecker, name)
-    ---@type Compost.BinEvent
+    -- new Compost.BinEvent
     local event = {
         name = name or "Unnamed Event",
         reducer = reducer or compost.reducers.none,
