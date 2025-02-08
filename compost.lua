@@ -474,6 +474,7 @@ function Template:addComponentData(component, data)
 
             entry.data = entry.data or {}
             for key, value in pairs(data) do
+                if key == data or value == data then error("Data table can't contain a reference to itself") end
                 entry.data[key] = value
             end
 
