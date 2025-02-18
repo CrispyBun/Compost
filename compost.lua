@@ -729,6 +729,26 @@ function compost.reducers.sum(accumulator, value)
     return (accumulator or 0) + value
 end
 
+--- Returns true if all received values are truthy
+---@param accumulator boolean?
+---@param value any
+---@return boolean
+function compost.reducers.l_and(accumulator, value)
+    if accumulator == nil then return not not value end
+    return accumulator and value
+end
+compost.reducers["and"] = compost.reducers.l_and
+
+--- Returns true if any of the received values are truthy
+---@param accumulator boolean?
+---@param value any
+---@return boolean
+function compost.reducers.l_or(accumulator, value)
+    if accumulator == nil then return not not value end
+    return accumulator or value
+end
+compost.reducers["or"] = compost.reducers.l_or
+
 ------------------------------------------------------------
 
 --- Some handy type checking functions for use with events.
@@ -750,6 +770,12 @@ end
 ---@return boolean
 compost.typeCheckers.isNumber = function(value)
     return type(value) == "number"
+end
+
+---@param value any
+---@return boolean
+compost.typeCheckers.isBoolean = function(value)
+    return type(value) == "boolean"
 end
 
 ------------------------------------------------------------
