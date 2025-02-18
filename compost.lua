@@ -41,6 +41,7 @@ local TemplateMT = {__index = Template, __uniquereference = true}
 ---@class Compost.TemplateComponentData
 ---@field component Compost.Component The component to be instanced
 ---@field constructorParams any[] Parameters for the component's constructor (init method)
+---@field setups fun(component: table)[] Each function in this array is called on the component once it's added to the bin by instancing the template
 ---@field data? table Table of data to be *deep* copied into the instanced component
 
 --- An event triggered on the entire bin, which components can add their own implementations for.  
@@ -366,20 +367,26 @@ end
 --- -- Add a component to a template along with constructor parameters for it
 --- local template3 = compost.newTemplate()
 --- template3:addComponent(MovementComponent, 100) -- 100 as a parameter for the component's `init`
+---
+--- -- Add component data programatically
+--- local template4 = compost.newTemplate(MovementComponent)
+--- template4:addComponentSetup(MovementComponent, function(component)
+---    component.speed = 100
+--- end)
 --- 
 --- -- Add data to a component in a template which will be deep copied to it upon instancing
---- local template4 = compost.newTemplate(MovementComponent)
---- template4:addComponentData(MovementComponent, {speed = 100})
+--- local template5 = compost.newTemplate(MovementComponent)
+--- template5:addComponentData(MovementComponent, {speed = 100})
 --- 
---- -- Add components and/or data to templates programatically (these functions will not be inherited from mixins)
---- local template5 = compost.newTemplate()
---- function template5.preInit(bin, ...)
+--- -- Add components and/or data to templates through template constructor (these functions will not be inherited from mixins)
+--- local template6 = compost.newTemplate()
+--- function template6.preInit(bin, ...)
 ---     -- The use of preInit to add components isn't necessary,
 ---     -- it's just optional for when you want to separate the adding of the components
 ---     -- and the setting of their data.
 ---     bin:addComponent(MovementComponent)
 --- end
---- function template5.init(bin, ...)
+--- function template6.init(bin, ...)
 ---     bin:expectComponent(MovementComponent).speed = 100
 --- end
 --- ```
@@ -400,8 +407,12 @@ function compost.newTemplate(...)
         if isTemplate then
             for componentIndex = 1, #mixin.components do
                 local entry = mixin.components[componentIndex]
+
                 template:addComponent(entry.component, unpack(entry.constructorParams))
                 if entry.data then template:addComponentData(entry.component, entry.data) end
+                for setupIndex = 1, #entry.setups do
+                    template:addComponentSetup(entry.component, entry.setups[setupIndex])
+                end
             end
         else
             ---@diagnostic disable-next-line: param-type-mismatch
@@ -437,13 +448,14 @@ function Template:addComponent(component, ...)
 
     components[#self.components+1] = {
         component = component,
-        constructorParams = {...}
+        constructorParams = {...},
+        setups = {}
     }
     return self
 end
 
 --- ### Template:addComponentParams(component, ...)
---- Adds constructor params to the given component in the template.
+--- Sets the constructor params of the given component in the template.
 ---@param component Compost.Component
 ---@param ... unknown
 ---@return Compost.Template self
@@ -453,6 +465,35 @@ function Template:addComponentParams(component, ...)
         local entry = components[componentIndex]
         if entry.component == component then
             entry.constructorParams = {...}
+            return self
+        end
+    end
+    error("Component '" .. tostring(component) .. "' is not in the template", 2)
+end
+
+--- ### Template:addComponentSetup(component, setupFn)
+--- Adds a setup function to the given component in the template to be called upon instancing.  
+--- 
+--- Previous setup functions are not overwritten, the new one is simply added to the list.  
+--- 
+--- If the exact same function is already included in the list of setups, it is not added a second time, but moved to the end of the list.
+---@param component Compost.Component
+---@param setupFn fun(component: table)
+---@return Compost.Template self
+function Template:addComponentSetup(component, setupFn)
+    local components = self.components
+    for componentIndex = 1, #components do
+        local entry = components[componentIndex]
+        if entry.component == component then
+
+            for setupIndex = 1, #entry.setups do
+                if entry.setups[setupIndex] == setupFn then
+                    table.remove(entry.setups, setupIndex)
+                    break
+                end
+            end
+
+            entry.setups[#entry.setups+1] = setupFn
             return self
         end
     end
@@ -508,6 +549,10 @@ function Template:instance(...)
             for key, value in pairs(data) do
                 bin[entry.component][key] = value
             end
+        end
+
+        for setupIndex = 1, #entry.setups do
+            entry.setups[setupIndex](bin[entry.component])
         end
     end
 
