@@ -782,5 +782,7 @@ end
 
 compost.Bin = Bin -- Bin class exposed for the ability to potentially add more methods
 compost.ComponentSharedMethods = ComponentSharedMethods -- Functions added to this table are injected into all created component definitions
+compost.Template = Template -- Template class exposed
+compost.BinEvent = BinEvent -- BinEvent class exposed
 
 return compost
