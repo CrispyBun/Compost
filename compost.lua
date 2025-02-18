@@ -351,7 +351,9 @@ end
 --- 
 --- Optionally, you can supply a list of mixins to build the template from.
 --- A mixin can either be a Component, or another Template.
---- All the components (and their data, in the case of templates) get copied over from mixins. The main init methods of other templates do NOT get copied.
+--- All the components and data get copied over from mixins. The main init methods of other templates do NOT get copied.
+--- 
+--- If multiple mixins have duplicate fields, the first mixin provided will take priority.
 --- 
 --- Example usage:
 --- ```
@@ -391,7 +393,7 @@ function compost.newTemplate(...)
     setmetatable(template, TemplateMT)
 
     local mixins = {...}
-    for mixinIndex = 1, #mixins do
+    for mixinIndex = #mixins, 1, -1 do
         local mixin = mixins[mixinIndex]
         local isTemplate = getmetatable(mixin).__index == Template
 
@@ -399,6 +401,7 @@ function compost.newTemplate(...)
             for componentIndex = 1, #mixin.components do
                 local entry = mixin.components[componentIndex]
                 template:addComponent(entry.component, unpack(entry.constructorParams))
+                if entry.data then template:addComponentData(entry.component, entry.data) end
             end
         else
             ---@diagnostic disable-next-line: param-type-mismatch
