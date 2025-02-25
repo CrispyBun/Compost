@@ -270,6 +270,21 @@ function Bin:expectComponent(component)
     return instance
 end
 
+--- ### Bin:tryCall(component, method, ...)
+--- Calls the given method in the specified component, if it's in the bin.  
+--- If the component isn't present in the bin, simply returns `nil`.
+--- Otherwise returns the return values of the method.
+---@param component Compost.Component
+---@param method string
+---@param ... unknown
+---@return unknown
+function Bin:tryCall(component, method, ...)
+    local instance = self[component]
+    if not instance then return nil end
+    if not instance[method] then error("Attempting to call undefined method '" .. tostring(method) .. "' on component '" .. tostring(component) .. "'", 2) end
+    return instance[method](instance, ...)
+end
+
 --- ### Bin:addListener(event, component)
 --- Attaches the component as a listener to an event (assuming the function for the listener is defined in the component).
 --- 
