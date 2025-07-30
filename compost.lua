@@ -358,7 +358,12 @@ function compost.newTemplate(...)
     local mixins = {...}
     for mixinIndex = #mixins, 1, -1 do
         local mixin = mixins[mixinIndex]
-        local isTemplate = getmetatable(mixin).__index == Template
+        local isTemplate = getmetatable(mixin) == TemplateMT
+        local isComponent = getmetatable(mixin) == ComponentMT
+
+        if not (isTemplate or isComponent) then
+            error("Mixin #" .. mixinIndex .. " is neither a template instance nor a component definition", 2)
+        end
 
         if isTemplate then
             for componentIndex = 1, #mixin.components do
@@ -484,6 +489,9 @@ Template.newBin = Template.instance
 
 --- ### Template:setInit(initFn)
 --- Sets the template's constructor function. This can be used to add data to the components in the Bin.
+--- 
+--- This is especially useful if you want to populate the components with some default data which
+--- other templates shouldn't inherit if using this template as a mixin and instead replace with their own data.
 ---@param initFn fun(bin: Compost.Bin, ...)
 ---@return Compost.Template self
 function Template:setInit(initFn)
@@ -493,7 +501,10 @@ end
 Template.setConstructor = Template.setInit
 
 --- ### Template:setPreInit(preInitFn)
---- Sets the template's preInit function. This can be used to add components to the Bin manually if you prefer to do it that way.
+--- Sets the template's preInit function. This can be used to add components to the Bin programatically if you prefer to do it that way.
+--- 
+--- Note that this method isn't inherited when the template is used as a mixin,
+--- so adding components through `addComponent` might be more desirable.
 ---@param preInitFn fun(bin: Compost.Bin, ...)
 ---@return Compost.Template self
 function Template:setPreInit(preInitFn)
