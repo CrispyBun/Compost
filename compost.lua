@@ -3,21 +3,18 @@ local compost = {}
 ---@diagnostic disable-next-line: deprecated
 local unpack = unpack or table.unpack
 
-local EVENTS_KEY = setmetatable({}, {__tostring = function () return "[Events]" end, __uniquereference = true})
-local META_KEY = setmetatable({}, {__tostring = function () return "[Metatable]" end, __uniquereference = true})
+local EVENTS_KEY = setmetatable({}, {__tostring = function () return "[Events]" end})
+local META_KEY = setmetatable({}, {__tostring = function () return "[Metatable]" end})
 
 compost.EVENTS_KEY = EVENTS_KEY -- Used to get the list of events from a Bin
 compost.META_KEY = META_KEY -- Used to get the metatable of a component used for its instances
 
 ------------------------------------------------------------
 
----@return table
-local function getClassBase() return setmetatable({}, {__uniquereference = true}) end
-
 --- An object holding instanced components  
 ---@class Compost.Bin
 ---@field [table] table
-local Bin = getClassBase()
+local Bin = {}
 local BinMT = {__index = Bin}
 
 --- If you're using annotations, your component definitions should inherit from this class
@@ -27,32 +24,29 @@ local BinMT = {__index = Bin}
 ---@field init? fun(self: table, ...) Called when the component is added to a bin. While it receives constructor arguments, it's recommended to make those optional to allow for easy creation of Bins using templates.
 ---@field destruct? fun(self: table) Called when the component is removed from a bin.
 ---@field Events? table<string, Compost.BinEvent> A table of events this component defines and announces. This should be the place where events that a component controls should be defined, though BinEvents can be defined anywhere in your codebase. Putting events in this table is just a convention.
-local ComponentSharedMethods = getClassBase()
+local ComponentSharedMethods = {}
 
 --- The main way to consistently instance objects, without having to spam `addComponent` a million times.  
---- Even when instanced, Templates are *not* deep copied when used in templates or in `deepCopy`.
 ---@class Compost.Template
 ---@field init? fun(bin: Compost.Bin, ...) Called when a bin is instanced from the template
 ---@field preInit? fun(bin: Compost.Bin, ...) Called when a bin is instancing from the template, but before any components have been added to it. Arguments are the same as for init.
 ---@field components Compost.TemplateComponentData[]
-local Template = getClassBase()
-local TemplateMT = {__index = Template, __uniquereference = true}
+local Template = {}
+local TemplateMT = {__index = Template}
 
 ---@class Compost.TemplateComponentData
 ---@field component Compost.Component The component to be instanced
 ---@field constructorParams any[] Parameters for the component's constructor (init method)
 ---@field setups fun(component: table)[] Each function in this array is called on the component once it's added to the bin by instancing the template
----@field data? table Table of data to be *deep* copied into the instanced component
 
 --- An event triggered on the entire bin, which components can add their own implementations for.  
---- Even when instanced, BinEvents are *not* deep copied when used in templates or in `deepCopy`, as the reference to them is important.
 ---@class Compost.BinEvent
 ---@field name string The name of the event, mainly for debugging purposes
 ---@field reducer fun(accumulator: any, value: unknown, index: integer, component: table): any A reducer function, used for events for which listeners return values. You can use a function from `compost.reducers` or write your own. Default is `compost.reducers.none`.
 ---@field typeChecker? fun(value: any): boolean A function for checking if the listeners are returning the correct type. If not present, no type checking is done. You can use a function from `compost.typeCheckers` or write your own.
 ---@field defaultValue? any A value that is returned from announcing the event if no listeners are attached to it. If at least one listener is attached, this value will not be returned.
-local BinEvent = getClassBase()
-local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end, __uniquereference = true}
+local BinEvent = {}
+local BinEventMT = {__index = BinEvent, __tostring = function(self) return self.name end}
 
 ------------------------------------------------------------
 
@@ -64,49 +58,7 @@ end
 local ComponentMT = {
     __index = ComponentSharedMethods,
     __tostring = getComponentName,
-    __uniquereference = true
 }
-
-------------------------------------------------------------
-
---- Returns a deep copy of the input value.  
---- 
---- Notes on metatables:
---- * If a table with a protected metatable is present, this function will error.
---- * If a table with a metatable is present, the metatable will also be assigned to the copied table (but the metatable itself will NOT be copied, only referenced).
---- * If a table has a metatable with the key `__uniquereference` set to a truthy value, the table will not be copied, and only referenced (the field indicates copying the value makes no sense - mainly used for types, keys, class definitions).
----@generic T
----@param v T The value to copy
----@param _seenTables? table
----@return T
-function compost.deepCopy(v, _seenTables)
-    if type(v) == "table" then
-        _seenTables = _seenTables or {}
-
-        if _seenTables[v] then
-            return _seenTables[v]
-        end
-
-        local mt = getmetatable(v)
-        if mt and mt.__uniquereference then return v end
-
-        local copiedTable = {}
-        _seenTables[v] = copiedTable
-
-        for key, value in pairs(v) do
-            local copiedKey = compost.deepCopy(key, _seenTables)
-            local copiedValue = compost.deepCopy(value, _seenTables)
-            copiedTable[copiedKey] = copiedValue
-        end
-
-        if mt then
-            setmetatable(copiedTable, mt)
-        end
-
-        return copiedTable
-    end
-    return v
-end
 
 ------------------------------------------------------------
 
@@ -353,21 +305,14 @@ function Bin:announce(event, ...)
     return event:announce(self, ...)
 end
 
---- ### Bin:clone()
---- Returns a deep copy of the bin.
----@return Compost.Bin
-function Bin:clone()
-    return compost.deepCopy(self)
-end
-
 ------------------------------------------------------------
 
 --- ### Compost.newTemplate(...mixins)
 --- Creates a new template for instancing Bins.
 --- 
 --- Optionally, you can supply a list of mixins to build the template from.
---- A mixin can either be a Component, or another Template.
---- All the components and data get copied over from mixins. The main init methods of other templates do NOT get copied.
+--- A mixin can either be a Component definition, or an instance of another Template.
+--- All the components and data get copied over from mixins. The main init (and preinit) methods of other templates do NOT get copied.
 --- 
 --- If multiple mixins have duplicate fields, the first mixin provided will take priority.
 --- 
@@ -389,19 +334,15 @@ end
 ---    component.speed = 100
 --- end)
 --- 
---- -- Add data to a component in a template which will be deep copied to it upon instancing
---- local template5 = compost.newTemplate(MovementComponent)
---- template5:addComponentData(MovementComponent, {speed = 100})
---- 
---- -- Add components and/or data to templates through template constructor (these functions will not be inherited from mixins)
---- local template6 = compost.newTemplate()
---- function template6.preInit(bin, ...)
+--- -- Add components and/or data to templates through template constructor (these functions will not be inherited in mixins)
+--- local template5 = compost.newTemplate()
+--- function template5.preInit(bin, ...)
 ---     -- The use of preInit to add components isn't necessary,
 ---     -- it's just optional for when you want to separate the adding of the components
 ---     -- and the setting of their data.
 ---     bin:addComponent(MovementComponent)
 --- end
---- function template6.init(bin, ...)
+--- function template5.init(bin, ...)
 ---     bin:expectComponent(MovementComponent).speed = 100
 --- end
 --- ```
@@ -424,7 +365,6 @@ function compost.newTemplate(...)
                 local entry = mixin.components[componentIndex]
 
                 template:addComponent(entry.component, unpack(entry.constructorParams))
-                if entry.data then template:addComponentData(entry.component, entry.data) end
                 for setupIndex = 1, #entry.setups do
                     template:addComponentSetup(entry.component, entry.setups[setupIndex])
                 end
@@ -441,7 +381,7 @@ end
 --- ### Template:addComponent(component, ...)
 --- Adds a component to the template, optionally also supplying constructor params for the component's `init` method (there must be no `nil`s in the middle of the params however).
 --- 
---- If the component is already present, the constructor params will be overwritten, but the data will be kept.
+--- If the component is already present, the constructor params will be overwritten.
 --- 
 --- Example usage:
 --- ```lua
@@ -515,34 +455,6 @@ function Template:addComponentSetup(component, setupFn)
     error("Component '" .. tostring(component) .. "' is not in the template", 2)
 end
 
---- ### Template:addComponentData(component, data)
---- Adds data to the given component in the template to be deep copied into the component upon instancing.
---- 
---- Example usage:
---- ```lua
---- template:addComponentData(Position, {x = 100, y = 100})
---- ```
----@param component Compost.Component
----@param data table
----@return Compost.Template self
-function Template:addComponentData(component, data)
-    local components = self.components
-    for componentIndex = 1, #components do
-        local entry = components[componentIndex]
-        if entry.component == component then
-
-            entry.data = entry.data or {}
-            for key, value in pairs(data) do
-                if key == data or value == data then error("Data table can't contain a reference to itself") end
-                entry.data[key] = value
-            end
-
-            return self
-        end
-    end
-    error("Component '" .. tostring(component) .. "' is not in the template", 2)
-end
-
 --- ### Template:instance(...)
 --- ### Template:newBin(...)
 --- Instances the template, passing in the arguments into its init method, if there is one.
@@ -557,13 +469,6 @@ function Template:instance(...)
         local entry = self.components[componentIndex]
         if not bin[entry.component] then
             bin:addComponent(entry.component, unpack(entry.constructorParams))
-        end
-
-        local data = compost.deepCopy(entry.data)
-        if data then
-            for key, value in pairs(data) do
-                bin[entry.component][key] = value
-            end
         end
 
         for setupIndex = 1, #entry.setups do
